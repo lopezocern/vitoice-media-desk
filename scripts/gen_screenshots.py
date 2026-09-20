@@ -1,6 +1,7 @@
-"""离屏渲染各页面高清截图，输出到 docs/assets/screenshots/ 供文档使用。"""
+"""渲染各页面高清截图，输出到 docs/assets/screenshots/ 供文档使用。"""
 import os
 import sys
+import time
 
 # 注意：用真实平台渲染以加载系统中文字体；离屏平台会因缺字体导致全部中文显示为“□”
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -35,8 +36,11 @@ for name, fn in [
     ("全局设置", "settings"),
 ]:
     win.sidebar.select(idx_by_name[name])
-    for _ in range(2):
+    win.raise_()
+    win.activateWindow()
+    for _ in range(6):
         app.processEvents()
+        time.sleep(0.06)
     path = OUT / f"{fn}.png"
     win.grab().save(str(path))
     print("saved", path)
