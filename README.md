@@ -4,6 +4,18 @@
 
 > 主要面向媒体管理与整理场景，为设计师 / 开发者提供一条龙、可视化的批量处理工作台。
 
+## 界面一览
+
+![总览](docs/assets/screenshots/overview.png)
+
+![视频压缩](docs/assets/screenshots/compress.png) ![视频切割](docs/assets/screenshots/cut.png)
+
+![视频拼接](docs/assets/screenshots/concat.png) ![格式转换](docs/assets/screenshots/convert.png)
+
+![文件整理](docs/assets/screenshots/rename.png) ![全局设置](docs/assets/screenshots/settings.png)
+
+> 完整操作流程见 [docs/使用说明.md](docs/使用说明.md)。
+
 ## 功能总览
 
 | 模块 | 说明 |
@@ -92,3 +104,7 @@ python tests/ui_build_check.py
 - `docs/使用说明.md` —— 各模块操作指引
 - `docs/media-desk-prd/` —— 产品需求文档
 - `docs/prototype/mediadesk/index.html` —— 高保真交互原型
+
+## License
+
+[MIT](LICENSE) © Vitoice
