@@ -7,11 +7,11 @@
 """
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QRect, QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QRadioButton, QScrollArea, QSpinBox,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QLayout, QLineEdit, QMessageBox, QPushButton, QRadioButton, QScrollArea,
+    QSpinBox, QStackedWidget, QVBoxLayout, QWidget, QWidgetItem,
 )
 
 from ..renamer import (
@@ -27,20 +27,84 @@ _COLOR_OK = "#2f9e54"
 
 
 class _VarButton(QPushButton):
-    """模板变量的快速插入按钮，点击即把关键字文本追加进模板。"""
+    """模板变量的快速插入按钮，点击即把关键字文本插入模板光标处。"""
 
-    def __init__(self, text: str, value: str, target: QLineEdit):
+    def __init__(self, text: str, value: str, target: QLineEdit, hint: str = ""):
         super().__init__(text)
         self._value = value
         self._target = target
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setObjectName("Ghost")
+        if hint:
+            self.setToolTip(hint)
         self.clicked.connect(self._insert)
 
     def _insert(self) -> None:
         cur = self._target
         cur.insert(self._value)
         cur.setFocus()
+
+
+class _FlowLayout(QLayout):
+    """轻量流式布局：子项放不下自动换行，避免按钮挤压成“一坨”。"""
+
+    def __init__(self, spacing: int = 6, parent=None):
+        super().__init__(parent)
+        self._items: list[QLayoutItem] = []
+        self.setSpacing(spacing)
+
+    def addItem(self, item) -> None:
+        self._items.append(item)
+
+    def addWidget(self, w) -> None:
+        self.addChildWidget(w)
+        self.addItem(QWidgetItem(w))
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, i: int):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i: int):
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return self._do(width).height()
+
+    def setGeometry(self, rect: QRect) -> None:
+        super().setGeometry(rect)
+        self._do(rect.width(), rect)
+
+    def sizeHint(self) -> QSize:
+        return self._do(10 ** 5)
+
+    def minimumSize(self) -> QSize:
+        s = QSize()
+        for it in self._items:
+            s = s.expandedTo(it.minimumSize())
+        return s
+
+    def _do(self, width: int, rect: QRect | None = None) -> QSize:
+        x = y = line_h = 0
+        gap = self.spacing()
+        for it in self._items:
+            hs = it.sizeHint()
+            if x > 0 and x + hs.width() > width:
+                x = 0
+                y += line_h + gap
+                line_h = 0
+            if rect is not None:
+                it.setGeometry(QRect(x, y, hs.width(), hs.height()))
+            x += hs.width() + gap
+            line_h = max(line_h, hs.height())
+        return QSize(x if x > gap else 0, y + line_h)
 
 
 class _DateTimeDialog(QDialog):
@@ -290,39 +354,40 @@ class RenamePage(QWidget):
         self.template_input.setPlaceholderText("如 ${create_time:yyyy-MM-dd}_${seq:start=1;increment=1;padding=3}")
         self.template_input.textChanged.connect(self._schedule_refresh)
         lay.addWidget(self.template_input)
-        lay.addWidget(HelpLabel("点下方按钮插入变量；普通文字可混写。"))
+        lay.addWidget(HelpLabel("点下方按钮把变量插到光标处；普通文字可混写。"))
 
-        grid = QHBoxLayout()
-        grid.setSpacing(4)
-        # val 为 None 表示占位按钮（依赖媒体库元数据，本轮暂无数据源）；
-        # val == "__datetime__" 表示「日期时间」选择弹窗入口。
-        vars_ = [("原名称", "${original}"), ("文件夹", "${folder}"),
-                 ("标签名", None),
-                 ("来源网站", None), ("日期时间", "__datetime__"), ("序列号", "${seq:start=1;increment=1;padding=3}"),
-                 ("随机串", "${random:6}"), ("UUID", "${uuid}")]
-        for i in range(0, len(vars_), 3):
-            row = QHBoxLayout()
-            row.setSpacing(4)
-            for text, val in vars_[i:i + 3]:
-                if val is None:
-                    b = QPushButton(text)
-                    b.setObjectName("Ghost")
-                    b.setCursor(Qt.CursorShape.PointingHandCursor)
-                    b.clicked.connect(
-                        lambda _=False, t=text: QMessageBox.information(
-                            self, "暂不支持",
-                            f"「{t}」依赖媒体标签/来源元数据，当前暂无数据源。"))
-                    row.addWidget(b)
-                elif val == "__datetime__":
-                    b = QPushButton(text)
-                    b.setObjectName("Ghost")
-                    b.setCursor(Qt.CursorShape.PointingHandCursor)
-                    b.clicked.connect(self._open_datetime)
-                    row.addWidget(b)
-                else:
-                    row.addWidget(_VarButton(text, val, self.template_input))
-            grid.addLayout(row)
-        lay.addLayout(grid)
+        def _group(title: str) -> QLabel:
+            t = QLabel(title)
+            t.setStyleSheet("color:#8b93ab;font-size:11px;font-weight:600;margin-top:2px;letter-spacing:0.4px;")
+            return t
+
+        # 文件信息
+        lay.addWidget(_group("文件信息"))
+        _fi = _FlowLayout(6)
+        _fi.addWidget(_VarButton("原名称", "${original}", self.template_input, "原文件名（不含扩展名）"))
+        _fi.addWidget(_VarButton("文件夹", "${folder}", self.template_input, "文件所在文件夹名"))
+        lay.addLayout(_fi)
+
+        # 时间
+        lay.addWidget(_group("时间"))
+        _tm = _FlowLayout(6)
+        _db = QPushButton("创建 / 修改时间")
+        _db.setObjectName("Ghost")
+        _db.setCursor(Qt.CursorShape.PointingHandCursor)
+        _db.setToolTip("选择时间源（创建 / 修改）与格式后插入")
+        _db.clicked.connect(self._open_datetime)
+        _tm.addWidget(_db)
+        lay.addLayout(_tm)
+
+        # 序号 / 随机
+        lay.addWidget(_group("序号 / 随机"))
+        _sr = _FlowLayout(6)
+        _sr.addWidget(_VarButton("序列号", "${seq:start=1;increment=1;padding=3}",
+                                 self.template_input, "自动递增序号，可设起始 / 增量 / 补零"))
+        _sr.addWidget(_VarButton("随机串", "${random:6}", self.template_input, "N 位随机字符串"))
+        _sr.addWidget(_VarButton("UUID", "${uuid}", self.template_input, "随机 UUID"))
+        lay.addLayout(_sr)
+
         lay.addStretch(1)
         w.setLayout(lay)
         return w
