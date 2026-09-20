@@ -1,0 +1,26 @@
+# 虚拟环境
+.venv/
+.venv-build/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+
+# 打包产物
+dist/
+*.spec
+
+# 随包 FFmpeg（196MB 二进制，由 scripts/fetch_ffmpeg.py 按需下载）
+ffmpeg/
+release/
+
+# 敏感文件（含凭据，切勿提交）
+.env
+legacy_scripts/tele_tools/.env
+tele_tools/.env
+
+# 运行期
+*.log

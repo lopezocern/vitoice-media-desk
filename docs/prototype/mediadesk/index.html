@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MediaDesk · 媒体工作台 高保真原型</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="overview">
+
+<!-- ======== App Shell · 单壳层（nav/顶部/状态栏固定，永不漂移） ======== -->
+<div class="app-shell">
+
+  <!-- 侧边导航 -->
+  <aside class="app-nav">
+    <div class="nav-brand">
+      <div class="brand-logo">M</div>
+      <div class="brand-text"><b>MediaDesk</b><span>媒体工作台</span></div>
+    </div>
+
+    <div class="nav-group">工作台</div>
+    <a class="nav-item" data-nav="overview" href="#overview">
+      <span class="nav-ico" data-icon="overview"></span><span class="nav-label">总览</span>
+    </a>
+    <a class="nav-item" data-nav="compress" href="#compress">
+      <span class="nav-ico" data-icon="compress"></span><span class="nav-label">视频压缩</span>
+    </a>
+    <a class="nav-item" data-nav="cut" href="#cut">
+      <span class="nav-ico" data-icon="cut"></span><span class="nav-label">视频切割</span>
+    </a>
+    <a class="nav-item" data-nav="concat" href="#concat">
+      <span class="nav-ico" data-icon="concat"></span><span class="nav-label">视频拼接</span>
+    </a>
+    <a class="nav-item" data-nav="convert" href="#convert">
+      <span class="nav-ico" data-icon="convert"></span><span class="nav-label">格式转换</span>
+    </a>
+    <a class="nav-item" data-nav="rename" href="#rename">
+      <span class="nav-ico" data-icon="rename"></span><span class="nav-label">文件整理</span>
+    </a>
+
+    <div class="nav-group">系统</div>
+    <a class="nav-item" data-nav="settings" href="#settings">
+      <span class="nav-ico" data-icon="settings"></span><span class="nav-label">全局设置</span>
+    </a>
+
+    <div class="nav-foot">
+      <div class="nav-env">
+        <span class="env-dot ok"></span>
+        <span class="env-text" id="navEnvText">检测中…</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 内容区 -->
+  <div class="app-main">
+    <header class="topbar">
+      <button class="nav-collapse" id="collapseBtn" title="显示/隐藏侧边栏" aria-label="折叠侧边栏">
+        <span data-icon="menu"></span>
+      </button>
+      <span class="tb-logo" data-icon="film" style="color:#4f5bd5"></span>
+      <span class="tb-title" id="tbTitle">媒体工作台</span>
+      <span class="tb-tag">MediaDesk</span>
+      <div style="flex:1"></div>
+      <span class="env-caps" id="tbEnvCaps">检测中…</span>
+    </header>
+
+    <main class="app-content" id="content"><!-- 路由注入各页视图 --></main>
+
+    <footer class="statusbar">
+      <span class="stat" id="statRun"><span class="stat-label">运行中</span> <b class="s-run">0</b></span>
+      <span class="stat" id="statDone"><span class="stat-label">完成</span> <b class="s-ok">0</b></span>
+      <span class="stat" id="statFail"><span class="stat-label">失败</span> <b class="s-err">0</b></span>
+      <div style="flex:1"></div>
+      <span class="env-hint" id="envHint">检测环境…</span>
+      <button class="btn-ghost btn-sm" id="stopAll">停止全部</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ======== 全局 toast ======== -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="mock.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MediaDesk · 真机验证清单</title>
+<style>
+  :root{
+    --bg:#f4f5f8; --surface:#fff; --border:#eceef2; --text:#1a1d24; --soft:#8a92a3;
+    --accent:#4b63ff; --accent-soft:#eef1ff; --ok:#3f9d5a; --ok-soft:#eaf7ee;
+    --warn:#d97706; --warn-soft:#fdf3e3; --err:#d1495b; --err-soft:#fdecee;
+    --radius:14px; --font:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(1200px 480px at 15% -10%,#eef1ff 0%,transparent 55%),var(--bg);
+    color:var(--text);font-family:var(--font);font-size:14px;padding:32px 24px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:860px;margin:0 auto}
+  header{margin-bottom:22px}
+  header h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+  header p{color:var(--soft);font-size:13px;margin-top:4px;line-height:1.6}
+  .progress-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 18px;box-shadow:0 1px 2px rgba(20,24,40,.04);margin-bottom:20px}
+  .progress-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .progress-top b{color:var(--accent)}
+  .pbar{height:8px;border-radius:99px;background:var(--border);overflow:hidden}
+  .pbar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#5a72ff,#4b63ff);transition:width .25s ease}
+  .sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    margin-bottom:16px;overflow:hidden;box-shadow:0 1px 2px rgba(20,24,40,.04)}
+  .sec-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .sec-head h2{font-size:15px;font-weight:700}
+  .sec-head .tag{font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px}
+  .tag.prep{background:var(--accent-soft);color:var(--accent)}
+  .tag.core{background:var(--ok-soft);color:var(--ok)}
+  .sec-body{padding:6px 18px 14px}
+  .hint{color:var(--soft);font-size:12.5px;line-height:1.7;padding:10px 2px 6px}
+  .step{display:flex;gap:12px;padding:9px 2px;border-bottom:1px dashed var(--border);align-items:flex-start}
+  .step:last-child{border-bottom:none}
+  .step .cb{width:20px;height:20px;flex:0 0 auto;margin-top:1px;border:2px solid #c6ccdb;border-radius:5px;
+    display:grid;place-items:center;cursor:pointer;transition:all .15s ease;background:#fff}
+  .step.done .cb{background:var(--ok);border-color:var(--ok)}
+  .step.done .cb::after{content:"✓";color:#fff;font-size:13px;font-weight:800}
+  .step .body{flex:1}
+  .step .body .lbl{line-height:1.6}
+  .step .body .crit{margin-top:3px;font-size:12px;color:var(--soft);line-height:1.6}
+  .step.done .body .lbl{color:var(--ok);text-decoration:line-through}
+  .badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;margin-right:6px;font-weight:600}
+  .badge.good{background:var(--ok-soft);color:var(--ok)}
+  .badge.bad{background:var(--err-soft);color:var(--err)}
+  .step.done .badge.good{display:none}
+  .reset{display:inline-block;margin-top:6px;font-size:12.5px;color:var(--soft);cursor:pointer;background:none;border:none;text-decoration:underline}
+  .reset:hover{color:var(--err)}
+  .outcome{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:10px 2px;font-size:13px;line-height:1.7}
+  .outcome.ok{background:var(--ok-soft);border-color:#cde7d5;color:var(--okk,#2f7d46)}
+  .outcome.warn{background:var(--warn-soft);border-color:#f2e0bf;color:#a45c06}
+  .todo-note{margin-top:18px;background:var(--accent-soft);border-radius:var(--radius);padding:14px 18px;font-size:13px;color:#3d3d5e;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>MediaDesk · 真机验证清单</h1>
+  <p>在装有完整 FFmpeg 的机器上，逐项跑通桌面台各模块的<b>端到端真实处理</b>。边做边勾选，进度自动保存（存在本浏览器）。本机精简版 FFmpeg 只能离线断言命令，以下均为「真实跑一遍」的验收项。</p>
+</header>
+
+<div class="progress-card">
+  <div class="progress-top"><span>总进度</span><b id="pct">0%</b></div>
+  <div class="pbar"><i id="bar"></i></div>
+  <button class="reset" id="reset">重置本清单</button>
+</div>
+
+<div class="sec">
+  <div class="sec-head"><h2>0 · 环境准备</h2><span class="tag prep">一次性</span></div>
+  <div class="sec-body">
+    <div class="hint">准备一台装有完整版 FFmpeg 的机器，并在系统 PATH 中能直接调用 ffmpeg 与 ffprobe。准备至少 1 个真实视频素材（建议含不同分辨率/编码，便于测拼接）。</div>
+    <div id="s-prep"></div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-head"><h2>1 · 视频压缩</h2><span class="tag core">阶段一</span></div>
+  <div class="sec-body"><div id="s-compress"></div></div>
+</div>
+
+<div class="sec">
+  <div class="sec-head"><h2>2 · 视频切割</h2><span class="tag core">阶段二</span></div>
+  <div class="sec-body"><div id="s-cut"></div></div>
+</div>
+
+<div class="sec">
+  <div class="sec-head"><h2>3 · 视频拼接</h2><span class="tag core">阶段二</span></div>
+  <div class="sec-body"><div id="s-concat"></div></div>
+</div>
+
+<div class="sec">
+  <div class="sec-head"><h2>4 · 格式转换</h2><span class="tag core">阶段二</span></div>
+  <div class="sec-body"><div id="s-convert"></div></div>
+</div>
+
+<div class="sec">
+  <div class="sec-head"><h2>5 · 验收汇总</h2><span class="tag core">结论</span></div>
+  <div class="sec-body">
+    <div id="s-summary"></div>
+    <div class="outcome" id="finalMsg">尚未完成全部验证项。</div>
+  </div>
+</div>
+
+<div class="todo-note">
+  <b>通过建议：</b>完成 0 环境准备 + 四大模块各自的「真实处理成功」与「进度条最后到 100% / 完成」两项即可判定本模块通过；GPU 回退若有 NVIDIA 硬编的机器则另测。所有输出文件建议用 ffprobe 抽查一下，确认码率/分辨率/时长符合选中的参数。
+</div>
+</div>
+
+<script>
+const SECTIONS = {
+  prep: [
+    {label:"ffmpeg / ffprobe 可从命令行调用（非精简版，含 libx264/libx265/libvpx/nvenc 等）",crit:"命令行 `ffmpeg -version` 正常输出；`ffmpeg -encoders` 能看到所需编码器"},
+    {label:"桌面台「全局设置」里 FFmpeg/FFprobe 路径已指向完整版（或用自动探测）",crit:"状态标签不再提示精简版；能正常保存配置"},
+    {label:"准备 ≥1 个真实视频素材（建议不同分辨率/编码各一个）",crit:"素材可正常播放、有明确时长"},
+  ],
+  compress: [
+    {label:"导入 1 个视频，保持默认参数点击开始压缩",crit:"进度条平滑走到 100%，状态显示「完成」"},
+    {label:"检查输出文件：存在于输出目录、可播放、尺寸合理",crit:"用 ffprobe 抽查分辨率/码率符合所选（如 CRF、scale）"},
+    {label:"验证压缩率展示：完成行显示“原大小 → 新大小”",crit:"压缩后体积明显变化且符合 CRF 设定趋势（CRF 越大越省）"},
+    {label:"批量：一次拖入多个不同视频并发压缩",crit:"并行队列正常，总时长≈单文件数×单文件时长（受并发限制），无串文件"},
+    {label:"（有 NVIDIA 硬编的机器）勾选 GPU 加速重跑一次",crit:"日志/标签显示 hevc_nvenc，速度显著快于软件，输出正常"},
+  ],
+  cut: [
+    {label:"选 1 个视频，设置 2 段时间段（精确重编码），开始切割",crit:"输出 2 个文件：`源名_1.<ext>` 与 `源名_2.<ext>`，进度到 100%"},
+    {label:"用播放器/ffprobe 核对两段时长",crit:"时长≈所填 开始~结束 区间，起止画面正确（帧精确）"},
+    {label:"换成「快速流复制」重切一次",crit:"秒级完成；首帧从最近关键帧对齐（起止允许小幅偏差），输出可播放"},
+    {label:"切割页底部汇总统计正确",crit:"「共 n 个 | 完成 | 失败 | 取消」数字对得上"},
+  ],
+  concat: [
+    {label:"把 2 个同参数视频加入列表（顺序为拼接顺序），快速流复制拼接",crit:"输出 1 个 `<首前缀名>_concat.<ext>`；全程无缝（-c copy）"},
+    {label:"用 ffprobe 核对拼接后总时长≈两段之和",crit:"时长几乎等于两段相加；可整段正常播放"},
+    {label:"换 2 个不同编码/尺寸的视频，改用「精确重编码」拼接",crit:"统一编码成功，无黑屏/音画不同步；时长≈两段之和"},
+    {label:"确认临时 concat 列表文件已自动清理",crit:"输出目录里没有残留的 `.*_concat.txt`"},
+  ],
+  convert: [
+    {label:"mp4→webm（平衡画质，保持原尺寸）",crit:"输出 `源名.webm`，为 VP8；ffprobe `codec_name=vp8`，可播放"},
+    {label:"mp4→mkv 并把分辨率设为 1280x720",crit:"输出 1280x720；ffprobe 核对 width/height=1280/720"},
+    {label:"「去掉音频」转换一次",crit:"输出容器无音频流（ffprobe 无 audio stream）"},
+    {label:"「仅提取音频」勾选后转换一次",crit:"输出 `源名.m4a`（aac 音轨），无视频流，可播放"},
+    {label:"（有 NVIDIA 硬编的机器）mp4→mp4 勾选 GPU",crit:"hevc_nvenc 生效，输出可播放，速度明显更快"},
+  ],
+  summary: [
+    {label:"四大模块（压缩/切割/拼接/转换）全部有至少一次真实成功",crit:"每个模块的「真实处理成功」都已勾选"},
+    {label:"全程无崩溃、无卡死；停止/取消可用",crit:"处理中按「停止」能正常中断，界面不冻结"},
+    {label:"FFmpeg 相关的边界已记录：本机识别到的硬编/软编情况",crit:"结论区记录编码器与是否需要回退"},
+  ]
+};
+
+const ORDER=["prep","compress","cut","concat","convert","summary"];
+const KEY="mediadesk-verify-v1";
+let state=JSON.parse(localStorage.getItem(KEY)||"null")||{done:{}};
+
+function renderSection(id){
+  const el=document.getElementById("s-"+id);
+  if(!el) return;
+  el.innerHTML="";
+  SECTIONS[id].forEach((it,i)=>{
+    const uid=id+":"+i, done=!!state.done[uid];
+    const d=document.createElement("div");
+    d.className="step"+(done?" done":"");
+    d.innerHTML=`<div class="cb"></div><div class="body">
+      <div class="lbl"><span class="badge good">待验证</span><span class="badge bad">未通过</span>${it.label}</div>
+      <div class="crit">验收：${it.crit}</div></div>`;
+    d.querySelector(".cb").onclick=()=>{state.done[uid]=!state.done[uid];persist();render();};
+    el.appendChild(d);
+  });
+}
+function renderSummary(){
+  const el=document.getElementById("s-summary");
+  if(!el) return;
+  el.innerHTML="";
+  const bySec={};
+  ORDER.forEach(id=>{let all=0,met=0;SECTIONS[id].forEach((_,i)=>{all++;if(state.done[id+":"+i])met++;});
+    bySec[id]={met,all};const names={prep:"环境准备",compress:"压缩",cut:"切割",concat:"拼接",convert:"转换",summary:"汇总"};
+    const d=document.createElement("div");d.className="outcome "+(met===all?"ok":"warn");
+    d.textContent=`${names[id]}：${met}/${all} ${met===all?"✔ 通过":"⚠ 未全过"}`;el.appendChild(d);});
+}
+function total(){let n=0,m=0;ORDER.forEach(id=>SECTIONS[id].forEach((_,i)=>{n++;if(state.done[id+":"+i])m++;}));return [m,n];}
+function render(){
+  ORDER.forEach(renderSection);renderSummary();
+  const[m,n]=total();const p=Math.round(m/n*100);
+  document.getElementById("pct").textContent=p+"%";
+  document.getElementById("bar").style.width=p+"%";
+  const core=[["compress","压缩"],["cut","切割"],["concat","拼接"],["convert","转换"]];
+  const missing=core.filter(c=>{const[met,all]=ratio(c[0]);return met<all;});
+  const msg=document.getElementById("finalMsg");
+  if(missing.length===0){msg.className="outcome ok";msg.textContent="全部核心模块真机验证通过：可进入发布/交付阶段。若还有 NVIDIA 硬编回退项未覆盖，建议标注后发布。";}
+  else{msg.className="outcome warn";msg.textContent="尚未通过："+missing.map(x=>x[1]).join("、")+"。请按清单逐项验证。";}
+}
+function ratio(id){let all=0,met=0;SECTIONS[id].forEach((_,i)=>{all++;if(state.done[id+":"+i])met++;});return[met,all];}
+function persist(){localStorage.setItem(KEY,JSON.stringify(state));}
+document.getElementById("reset").onclick=()=>{state={done:{}};persist();render();};
+render();
+</script>
+</body>
+</html>

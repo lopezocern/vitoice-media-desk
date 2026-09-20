@@ -1,0 +1,42 @@
+{
+  "ffmpeg_path": "",
+  "output_dir_mode": "same",
+  "output_dir_custom": "",
+  "gpu_enabled": true,
+  "gpu_encoder": "auto",
+  "compress": {
+    "speed_mode": "balanced",
+    "crf": null,
+    "bitrate_mode": "auto",
+    "resolution": "keep",
+    "resolution_w": 1920,
+    "resolution_h": 1080,
+    "fps": "keep",
+    "fps_value": 30,
+    "suffix": "_compressed",
+    "concurrency": 0
+  },
+  "cut": {
+    "mode": "reencode",
+    "crf": 18,
+    "preset": "fast",
+    "suffix": "_cut"
+  },
+  "concat": {
+    "mode": "copy",
+    "crf": 18,
+    "preset": "fast",
+    "suffix": "_concat"
+  },
+  "convert": {
+    "fmt": "mp4",
+    "quality": "balance",
+    "resolution": "keep",
+    "custom_res": "",
+    "gpu": false,
+    "audio": "keep",
+    "prefer_soft": true,
+    "audio_only": false
+  },
+  "log_enabled": true
+}
