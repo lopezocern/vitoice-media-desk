@@ -82,6 +82,10 @@ QPushButton#Ghost:hover{border-color:#4f5bd5;color:#4f5bd5;background:#f6f7fe;}
 QComboBox,QSpinBox,QLineEdit{background:#ffffff;border:1px solid #d3dae8;border-radius:9px;padding:6px 11px;font-size:13px;color:#1c2333;}
 QComboBox:hover,QSpinBox:hover,QLineEdit:hover{border-color:#aeb7d8;}
 QComboBox:focus,QSpinBox:focus,QLineEdit:focus{border-color:#4f5bd5;}
+/* 切割时间段弹窗：段行卡片 / 紧凑时间栏 / 无效段红框 */
+QWidget#SegCard{background:#fbfcff;border:1px solid #e6eaf3;border-radius:10px;}
+QSpinBox#TSeg{padding:6px 7px;}
+QSpinBox[invalid="true"]{border-color:#d1495b;background:#fff7f8;color:#c93548;}
 QCheckBox#AdvToggle{font-size:12.5px;color:#3a4256;font-weight:600;}
 QPushButton#Expander{background:transparent;border:none;color:#4f5bd5;font-size:12.5px;font-weight:600;
   text-align:left;padding:4px 2px;border-radius:6px;}

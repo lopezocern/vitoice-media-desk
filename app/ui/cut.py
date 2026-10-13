@@ -122,15 +122,14 @@ class CutDialog(QDialog):
     def __init__(self, parent, existing: list[list[str]]):
         super().__init__(parent)
         self.setWindowTitle("设置切割时间段")
-        self.resize(720, 460)
         self._rows: list[tuple[TimeField, TimeField, QLabel]] = []
         self._build(existing)
 
     def _build(self, existing: list[list[str]]) -> None:
         lay = QVBoxLayout(self)
         lay.setContentsMargins(18, 16, 18, 16)
-        tip = QLabel("每段「开始 - 结束」。可直接微调 时:分:秒；粘贴文本自动识别 "
-                     "秒/MM:SS/HH:MM:SS 并拆分多段。每段输出为一个文件。")
+        tip = QLabel("每段「开始 - 结束」各输出一个文件；可微调 时:分:秒，"
+                     "或粘贴文本自动识别秒/MM:SS/HH:MM:SS 并拆分多段。")
         tip.setWordWrap(True)
         tip.setStyleSheet("color:#8b93ab;font-size:12px;")
         lay.addWidget(tip)
@@ -156,7 +155,7 @@ class CutDialog(QDialog):
                            ("MM:SS", "ms"), ("HH:MM:SS", "hms")]:
             self.fmt_combo.addItem(label, val)
         self.fmt_combo.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.paste_btn = QPushButton("📋 粘贴时间")
+        self.paste_btn = QPushButton("粘贴时间")
         self.paste_btn.setObjectName("Ghost")
         self.paste_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.paste_btn.clicked.connect(self._paste_clipboard)
@@ -186,11 +185,18 @@ class CutDialog(QDialog):
         btns.addWidget(ok)
         lay.addLayout(btns)
         self._refresh_totals()
+        self._update_size()
+
+    def _update_size(self) -> None:
+        """高度随段数自适应：段少不空旷，段多到上限再内部滚动。"""
+        h = min(640, max(240, 180 + len(self._rows) * 44))
+        self.resize(780, h)
 
     def _add_row(self, start_sec: int, end_sec: int) -> None:
         row = QWidget()
+        row.setObjectName("SegCard")
         h = QHBoxLayout(row)
-        h.setContentsMargins(0, 0, 0, 0)
+        h.setContentsMargins(10, 8, 10, 8)
         h.setSpacing(6)
         s = TimeField(); e = TimeField()
         s.set_secs(start_sec); e.set_secs(end_sec)
@@ -199,7 +205,7 @@ class CutDialog(QDialog):
         dash = QLabel("—")
         dash.setStyleSheet("color:#8b93ab;")
         dur = QLabel("—")
-        dur.setMinimumWidth(64)
+        dur.setMinimumWidth(56)
         dur.setAlignment(Qt.AlignmentFlag.AlignRight)
         dur.setStyleSheet(
             "color:#8b93ab;font-size:12px;font-variant-numeric:tabular-nums;")
@@ -207,9 +213,11 @@ class CutDialog(QDialog):
         chain.setObjectName("Ghost")
         chain.setCursor(Qt.CursorShape.PointingHandCursor)
         chain.setToolTip("把开始时间设为上一段结束，实现连续切割")
-        delbtn = QPushButton("删除")
+        delbtn = QPushButton("✕")
         delbtn.setObjectName("Ghost")
         delbtn.setCursor(Qt.CursorShape.PointingHandCursor)
+        delbtn.setFixedWidth(36)
+        delbtn.setToolTip("删除此段")
         h.addWidget(s, 1)
         h.addWidget(dash, 0)
         h.addWidget(e, 1)
@@ -223,6 +231,7 @@ class CutDialog(QDialog):
         chain.clicked.connect(
             lambda: (s.set_secs(self._prev_end(row)), self._refresh_totals()))
         delbtn.clicked.connect(lambda: self._del_row(row))
+        self._update_size()
 
     def _prev_end(self, row: QWidget) -> int:
         idx = next(i for i, r in enumerate(self._rows)
@@ -235,6 +244,7 @@ class CutDialog(QDialog):
         row.setParent(None)
         row.deleteLater()
         self._refresh_totals()
+        self._update_size()
 
     def _add_tail(self) -> None:
         prev = self._rows[-1][1].secs() if self._rows else 0
@@ -251,20 +261,34 @@ class CutDialog(QDialog):
                 dur.setText("时长无效")
                 dur.setStyleSheet(
                     "color:#d1495b;font-size:12px;font-weight:600;")
+                s.set_invalid(True)
+                e.set_invalid(True)
                 valid = False
                 continue
             dur.setText(fmt_secs(es - ss))
             dur.setStyleSheet(
                 "color:#8b93ab;font-size:12px;"
                 "font-variant-numeric:tabular-nums;")
+            s.set_invalid(False)
+            e.set_invalid(False)
             total += es - ss
             n += 1
         if self._rows and valid:
-            self._tot_lbl.setText(f"{n} 段 · 总时长 {fmt_secs(total)}")
+            self._set_tot(f"{n} 段 · 总时长 {fmt_secs(total)}", ok=True)
         elif self._rows:
-            self._tot_lbl.setText("存在无效时间段")
+            self._set_tot("存在无效时间段", ok=False)
         else:
-            self._tot_lbl.setText("")
+            self._set_tot("", ok=True)
+
+    def _set_tot(self, text: str, ok: bool) -> None:
+        self._tot_lbl.setText(text)
+        if not text:
+            self._tot_lbl.setStyleSheet("color:#8b93ab;font-size:12px;")
+            return
+        color, bg = (("#2f9e54", "#e7f6ec") if ok else ("#d1495b", "#fdecee"))
+        self._tot_lbl.setStyleSheet(
+            f"color:{color};background:{bg};border-radius:999px;"
+            "padding:3px 12px;font-size:12px;font-weight:600;")
 
     def _parse_paste(self, text: str, fmt: str) -> list[tuple[int, int]]:
         pairs: list[tuple[int, int]] = []

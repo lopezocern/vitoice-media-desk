@@ -65,7 +65,8 @@ class TimeField(QWidget):
         for sb, suffix, hi in ((self._h, " h", 999), (self._m, " m", 59), (self._s, " s", 59)):
             sb.setRange(0, hi)
             sb.setSuffix(suffix)
-            sb.setFixedWidth(68)
+            sb.setObjectName("TSeg")
+            sb.setFixedWidth(78)
             sb.setAlignment(Qt.AlignmentFlag.AlignCenter)
             sb.setAccelerated(True)
             sb.valueChanged.connect(self._on_changed)
@@ -84,6 +85,13 @@ class TimeField(QWidget):
 
     def _on_changed(self, _v) -> None:
         self.valueChanged.emit()
+
+    def set_invalid(self, bad: bool) -> None:
+        """标记该段时间无效：三栏红边框 + 红字，提示比尾部红字更直接。"""
+        for sb in (self._h, self._m, self._s):
+            sb.setProperty("invalid", "true" if bad else "false")
+            sb.style().unpolish(sb)
+            sb.style().polish(sb)
 
     def secs(self) -> int:
         return self._h.value() * 3600 + self._m.value() * 60 + self._s.value()
