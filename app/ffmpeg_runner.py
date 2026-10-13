@@ -27,20 +27,27 @@ def build_compress_cmd(
     input_path: str,
     output_path: str,
     encoder: str,
-    crf: int,
-    preset: str,
-    resolution: str = "keep",       # keep / 1080 / 720 / custom
+    crf: int = 23,
+    preset: str = "fast",
+    resolution: str = "keep",        # keep / 1920x1080 / 1280x720 / 854x480 / 640x360 / 1080 / 720 / custom
     res_w: Optional[int] = None,
     res_h: Optional[int] = None,
     fps: str = "keep",              # keep / custom
     fps_value: int = 30,
+    rate_mode: str = "crf",          # crf=恒定画质 / bitrate=目标码率（新参数置于末尾，保持旧位置调用兼容）
+    bitrate: float = 4.5,           # 目标码率 Mbps（rate_mode=bitrate 时生效）
 ) -> list[str]:
     """组装压缩命令，返回 ffmpeg argv 列表。"""
     vf = []
-    if resolution == "1080":
-        vf.append(f"scale=-2:1080")
+    _FIXED_RES = {"1920x1080": (1920, 1080), "1280x720": (1280, 720),
+                  "854x480": (854, 480), "640x360": (640, 360)}
+    if resolution in _FIXED_RES:
+        w, h = _FIXED_RES[resolution]
+        vf.append(f"scale={w}:{h}")
+    elif resolution == "1080":       # 兼容旧配置值：宽自适应
+        vf.append("scale=-2:1080")
     elif resolution == "720":
-        vf.append(f"scale=-2:720")
+        vf.append("scale=-2:720")
     elif resolution == "custom" and res_w and res_h:
         even_w = res_w if res_w % 2 == 0 else res_w - 1
         even_h = res_h if res_h % 2 == 0 else res_h - 1
@@ -56,10 +63,19 @@ def build_compress_cmd(
     is_nvenc = "nvenc" in encoder
     if is_nvenc:
         # NVIDIA 硬件编码：quality 与 preset 的参数语义与软件不同
-        hw_preset = {"medium": "p4", "fast": "p5", "ultrafast": "p7"}.get(preset, "p4")
-        cmd += ["-c:v", encoder, "-preset", hw_preset, "-cq", str(crf)]
+        hw_preset = {"slow": "p2", "medium": "p4", "fast": "p5",
+                     "veryfast": "p7", "ultrafast": "p7"}.get(preset, "p4")
+        cmd += ["-c:v", encoder, "-preset", hw_preset]
+        if rate_mode == "bitrate":
+            cmd += ["-b:v", f"{bitrate:g}M"]
+        else:
+            cmd += ["-cq", str(crf)]
     else:
-        cmd += ["-c:v", encoder, "-preset", preset, "-crf", str(crf)]
+        cmd += ["-c:v", encoder, "-preset", preset]
+        if rate_mode == "bitrate":
+            cmd += ["-b:v", f"{bitrate:g}M"]
+        else:
+            cmd += ["-crf", str(crf)]
 
     cmd += ["-c:a", "copy"]
     cmd += ["-progress", "pipe:1", "-nostats", output_path]

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>压缩页参数区重设计 · MediaDesk</title>
+<style>
+  :root{
+    --brand:#4f5bd5; --brand-soft:#eef0fe; --brand-bg:#f3f5fd;
+    --ink:#1c2333; --ink-2:#3a4256; --ink-3:#5c6478; --ink-4:#8b93ab;
+    --line:#e4e9f2; --line-2:#dfe3ee; --ok:#2f9e54; --ok-bg:#e7f6ec;
+    --warn:#d1495b; --warn-bg:#fdecee; --custom:#b7791f; --custom-bg:#fdf3e3;
+    --card:#ffffff; --page:#f7f8fc; --radius:9px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI","Microsoft YaHei",sans-serif;background:var(--page);color:var(--ink);font-size:13px;padding:26px 30px}
+  h1{font-size:17px;font-weight:700}
+  .sub{color:var(--ink-4);font-size:12.5px;margin-top:3px}
+  .note{background:#fff;border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--ink-3);margin:14px 0 18px;max-width:960px}
+  .note b{color:var(--ink-2)}
+
+  .wrap{max-width:960px}
+  .page-head{display:flex;align-items:flex-end;gap:10px;margin-bottom:6px}
+  .page-head .bar{width:5px;height:16px;background:var(--brand);border-radius:2px;margin-bottom:2px}
+  .sec{display:flex;align-items:center;gap:7px;margin:22px 0 10px}
+  .sec .dot{width:5px;height:14px;background:var(--brand);border-radius:2px}
+  .sec span{font-size:13.5px;font-weight:700;color:var(--ink-2)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 10px}
+  .form{display:grid;grid-template-columns:96px 1fr;row-gap:0}
+  .form .lbl{color:var(--ink-3);font-size:12.5px;padding:8px 0;font-weight:600}
+  .frow{display:flex;align-items:center;gap:10px;padding:6px 0;flex-wrap:wrap;border-bottom:1px dashed transparent}
+  .frow .hint{color:var(--ink-4);font-size:11.5px}
+
+  .seg{display:inline-flex;background:#eef1f8;border-radius:9px;padding:3px;gap:3px}
+  .seg button{border:0;background:transparent;color:var(--ink-2);font-size:12.5px;font-weight:600;padding:6px 18px;border-radius:7px;cursor:pointer;transition:.15s}
+  .seg button.on{background:var(--brand);color:#fff;box-shadow:0 1px 4px rgba(79,91,213,.35)}
+  .seg button:not(.on):hover{background:#fff;color:var(--brand)}
+
+  .preset-info{grid-column:1 / -1;background:var(--brand-bg);border:1px solid #e3e7f5;border-radius:9px;padding:10px 14px;margin:2px 0 10px;display:flex;flex-direction:column;gap:3px}
+  .preset-info .h{display:flex;align-items:center;gap:10px}
+  .preset-info .name{font-size:12.5px;font-weight:700}
+  .preset-info .pill{margin-left:auto;font-size:11px;font-weight:600;color:var(--brand);background:var(--brand-soft);border-radius:999px;padding:2px 10px;white-space:nowrap}
+  .preset-info .detail{color:var(--ink-3);font-size:11.5px}
+
+  .crf-box{display:flex;align-items:center;gap:12px;flex:1;min-width:420px}
+  .crf-box input[type=range]{flex:1;accent-color:var(--brand);height:4px}
+  .crf-val{min-width:64px;text-align:center;font-weight:700;font-size:14px;color:var(--brand);background:var(--brand-soft);border-radius:8px;padding:5px 0}
+  .crf-tag{font-size:11px;color:var(--ink-4);min-width:46px}
+  .mini-btn{border:1px solid var(--line-2);background:#fff;color:var(--ink-3);font-size:11px;border-radius:7px;padding:4px 10px;cursor:pointer}
+  .mini-btn:hover{border-color:var(--brand);color:var(--brand)}
+  .tag-custom{font-size:10px;font-weight:700;color:var(--custom);background:var(--custom-bg);border-radius:5px;padding:2px 7px}
+
+  select{border:1px solid var(--line-2);border-radius:var(--radius);padding:6px 10px;font-size:12.5px;color:var(--ink-2);background:#fff;min-width:150px;outline:none;cursor:pointer}
+  select:hover{border-color:#aeb7d8}
+  input[type=number]{border:1px solid var(--line-2);border-radius:var(--radius);padding:6px 8px;font-size:12.5px;width:76px;color:var(--ink-2);outline:none}
+  input[type=number]:hover{border-color:#aeb7d8}
+  .dim-sep{color:var(--ink-4)}
+
+  .chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;color:var(--ink-2)}
+  .chk input{width:15px;height:15px;accent-color:var(--brand)}
+  .enc-pill{font-size:11px;font-weight:600;color:#fff;background:var(--brand);border-radius:999px;padding:2px 10px}
+
+  .dir-mode{flex:1;display:flex;gap:8px}
+  .dir-custom{border:1px solid var(--line-2);border-radius:var(--radius);padding:6px 10px;font-size:12px;color:var(--ink-3);flex:1;min-width:220px;background:#fbfcff}
+  .ghost{border:1px solid var(--line-2);background:#fff;color:var(--ink-2);font-size:12px;font-weight:600;border-radius:var(--radius);padding:6px 14px;cursor:pointer}
+  .ghost:hover{border-color:var(--brand);color:var(--brand);background:var(--brand-soft)}
+
+  .expander{margin-top:10px;border:0;background:transparent;color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;padding:6px 2px}
+  .adv-card{display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px 8px}
+  .adv-card.open{display:block}
+
+  .help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--line-2);color:var(--ink-4);font-size:10px;cursor:help;position:relative}
+  .help:hover .tip{display:block}
+  .tip{display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:22px;background:#2a3245;color:#fff;font-size:11px;font-weight:400;padding:7px 10px;border-radius:7px;width:250px;z-index:9;line-height:1.5}
+
+  .legend{margin-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:960px}
+  .legend .item{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;font-size:11.5px;color:var(--ink-3)}
+  .legend .item b{display:block;color:var(--ink-2);font-size:12px;margin-bottom:3px}
+  .tag-new{display:inline-block;background:var(--ok-bg);color:var(--ok);font-size:10px;font-weight:700;border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+  .tag-move{display:inline-block;background:var(--brand-soft);color:var(--brand);font-size:10px;font-weight:700;border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+
+  .footer{margin-top:18px;display:flex;align-items:center;gap:10px;max-width:960px}
+  .footer .stats{color:var(--ink-4);font-size:11.5px}
+  .footer .grow{flex:1}
+  .danger{border:1px solid #f3c9cf;background:#fff;color:var(--warn);font-size:12px;font-weight:600;border-radius:var(--radius);padding:7px 16px;cursor:pointer}
+  .primary{border:0;background:var(--brand);color:#fff;font-size:13px;font-weight:700;border-radius:var(--radius);padding:8px 26px;cursor:pointer;box-shadow:0 2px 8px rgba(79,91,213,.35)}
+  .primary:hover{background:#4349bf}
+  .mode-zone{display:flex;align-items:center;gap:12px;flex:1;flex-wrap:wrap;padding:8px 10px;background:#fbfcff;border:1px solid #eef1f8;border-radius:9px}
+</style>
+</head>
+<body>
+
+<div class="page-head"><div class="bar"></div><h1>压缩页参数区重设计 · v3</h1></div>
+<div class="sub">四档位从慢到快 · 档位=参数预设包 · CRF 拖动实时联动预估 · 比特率双模式</div>
+
+<div class="note">
+  <b>本版更新（v3）</b>：
+  ① <b>档位重构为四档，从慢到快</b>：极致画质 / 高画质 / 均衡（默认）/ 快速——原「超快 / 快速」语义重复已解决，四档在画质、体积、速度上拉开清晰梯度；
+  ② <b>CRF 联动预估</b>：手动拖 CRF 滑杆时，说明卡预估体积<b>实时联动计算</b>——以档位默认为基准，CRF 每调低 6 体积约翻倍、调高 6 约减半（x264 经验值）；
+  ③ 档位 = 预设包：切换时 CRF / 目标码率 / 说明卡全部跟随；手动改过的参数标「已自定义」并保留；
+  ④ 延续 v2：比特率双模式（CRF 恒定画质 ⇄ 目标码率 Mbps）、分辨率预设上移；
+  ⑤ <b>全部可交互</b>：切四档看梯度 → 拖 CRF 看预估联动 → 切「目标码率」改 Mbps → 换分辨率看预估变化。
+</div>
+
+<div class="sec"><div class="dot"></div><span>压缩参数（重设计后）</span></div>
+<div class="card">
+  <div class="form">
+
+    <div class="lbl">压缩档位</div>
+    <div class="frow">
+      <div class="seg" id="seg">
+        <button data-k="best">极致画质</button>
+        <button data-k="high">高画质</button>
+        <button data-k="standard" class="on">均衡</button>
+        <button data-k="fast">快速</button>
+      </div>
+      <span class="hint">从慢到快 · 切换时下方 CRF / 码率自动跟随 <span class="help">?<span class="tip">极致画质：最慢 · 最高保真，压缩幅度温和；高画质：偏慢 · 体积明显小于原片；均衡：推荐默认 · 速度与体积兼顾；快速：最快 · 体积最小，画质有可感损失。手动改过的参数会标「已自定义」，切档位时保留。</span></span></span>
+      <span class="tag-custom" id="custom-flag" style="display:none">已自定义</span>
+    </div>
+
+    <div class="preset-info">
+      <div class="h">
+        <span class="name" id="pi-name">均衡 — 推荐默认 · 速度与体积兼顾，多数场景的最优解</span>
+        <span class="pill" id="pi-crf">CRF 23 · 恒定画质/可变码率</span>
+      </div>
+      <div class="detail" id="pi-detail">本批 2 个文件共 965.6 MB → 预计约 174–367 MB · 硬编约 8–20 倍实时 · 实际结果依画面复杂度浮动</div>
+    </div>
+
+    <div class="lbl">码率控制<span class="tag-new">新增</span></div>
+    <div class="frow">
+      <div class="seg" id="mode-seg">
+        <button data-m="crf" class="on">CRF（恒定画质）</button>
+        <button data-m="bitrate">目标码率</button>
+      </div>
+      <span class="hint" id="mode-hint">给定画质，码率随画面复杂度自动浮动 <span class="help">?<span class="tip">CRF：压到指定画质，简单画面省码率、复杂画面给足码率，体积不可预知但画质稳定。目标码率：直接指定输出码率（Mbps），体积可精确预估，画质随内容波动。</span></span></span>
+    </div>
+
+    <div class="lbl"></div>
+    <div class="frow" style="padding-top:0">
+      <div class="mode-zone">
+        <!-- CRF 模式控件 -->
+        <span id="zone-crf" style="display:flex;align-items:center;gap:12px;flex:1;min-width:420px">
+          <span style="font-size:12px;color:var(--ink-3);font-weight:600">CRF</span>
+          <input type="range" id="crf" min="0" max="51" value="23" style="flex:1;accent-color:var(--brand);height:4px">
+          <span class="crf-val" id="crf-val">23</span>
+          <span class="crf-tag" id="crf-tag">中上画质</span>
+          <button class="mini-btn" id="crf-reset">恢复档位默认</button>
+        </span>
+        <!-- 目标码率模式控件 -->
+        <span id="zone-br" style="display:none;align-items:center;gap:12px;flex:1;min-width:420px">
+          <span style="font-size:12px;color:var(--ink-3);font-weight:600">目标码率</span>
+          <input type="range" id="br" min="0.5" max="20" step="0.5" value="4.5" style="flex:1;accent-color:var(--brand);height:4px">
+          <span class="crf-val" id="br-val">4.5</span>
+          <span class="crf-tag">Mbps</span>
+          <button class="mini-btn" id="br-reset">恢复档位默认</button>
+          <span class="hint">预估体积 = 码率 × 总时长（约 20 分钟）</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="lbl">分辨率<span class="tag-move">上移</span></div>
+    <div class="frow">
+      <select id="res">
+        <option value="keep">保持原尺寸</option>
+        <option value="1920x1080">1920 × 1080（1080p）</option>
+        <option value="1280x720">1280 × 720（720p）</option>
+        <option value="854x480">854 × 480（480p）</option>
+        <option value="640x360">640 × 360（360p）</option>
+        <option value="custom">自定义宽 × 高…</option>
+      </select>
+      <span id="res-custom" style="display:none">
+        <input type="number" value="1920"> <span class="dim-sep">×</span> <input type="number" value="1080">
+      </span>
+      <span class="hint" id="res-hint">按原始分辨率输出，不缩放</span>
+    </div>
+
+    <div class="lbl">硬件加速</div>
+    <div class="frow">
+      <label class="chk"><input type="checkbox" id="gpu" checked> 开启硬件加速</label>
+      <select><option>自动（推荐）· hevc_nvenc</option><option>h264_nvenc</option><option>libx264（软编）</option></select>
+      <span class="enc-pill" id="enc-pill">hevc_nvenc</span>
+      <span class="hint">需 NVIDIA 显卡且 FFmpeg 含 NVENC；未检测到时自动回退软件编码</span>
+    </div>
+
+    <div class="lbl">输出目录</div>
+    <div class="frow">
+      <div class="dir-mode">
+        <select style="min-width:130px"><option>同源目录 /out</option><option>统一指定目录</option></select>
+        <span class="dir-custom">G:\Media\out</span>
+        <button class="ghost">浏览…</button>
+      </div>
+    </div>
+
+  </div>
+
+  <button class="expander" id="adv-btn">▾ 展开高级参数（帧率 / 并发 / 命名）</button>
+  <div class="adv-card" id="adv-card">
+    <div class="form">
+      <div class="lbl">帧率</div>
+      <div class="frow">
+        <select id="fps">
+          <option value="keep">保持原值</option>
+          <option value="60">60 fps</option>
+          <option value="30">30 fps</option>
+          <option value="24">24 fps</option>
+          <option value="custom">自定义…</option>
+        </select>
+        <span id="fps-custom" style="display:none"><input type="number" value="30"> fps</span>
+        <span class="hint" id="fps-hint">不做改动</span>
+      </div>
+      <div class="lbl">同时压缩</div>
+      <div class="frow">
+        <input type="number" value="0" style="width:64px">
+        <span class="hint">路 · 0 = 自动（跟随 CPU 核数）；越大越快但越占 CPU</span>
+      </div>
+      <div class="lbl">命名后缀</div>
+      <div class="frow">
+        <input type="text" value="_compressed" style="border:1px solid var(--line-2);border-radius:9px;padding:6px 10px;font-size:12.5px;width:180px;color:var(--ink-2)">
+        <span class="hint">输出文件名 = 原名 + 后缀 + 扩展名</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <span class="stats">本批 2 个 · 共 965.6 MB · 约 20 分钟 · <span id="est">预计约 174–367 MB</span></span>
+  <span class="grow"></span>
+  <button class="danger">停止本轮</button>
+  <button class="ghost">追加文件</button>
+  <button class="primary">开始压缩</button>
+</div>
+
+<div class="legend">
+  <div class="item"><b>四档位 · 从慢到快</b>极致画质 / 高画质 / 均衡（默认）/ 快速，画质-体积-速度梯度清晰；切换时 CRF / 码率 / 说明卡全部跟随，手动改过标「已自定义」并保留</div>
+  <div class="item"><b>码率控制（新增）</b>CRF 恒定画质 ⇄ 目标码率 Mbps 双模式；拖动 CRF / 码率滑杆，说明卡预估体积实时联动计算</div>
+  <div class="item"><b>分辨率上移扩展</b>1080p/720p/480p/360p/自定义；降档时预估体积按像素比例下调</div>
+</div>
+
+<script>
+/* 四档位，从慢到快：CRF 16 → 20 → 23 → 28，画质递减、体积递减、编码速度递增 */
+const META = {
+  best:{name:"极致画质 — 最高保真 · 压缩幅度温和，体积偏大、耗时最长", ratio:[0.30,0.55], br:8.0, sw:"软编约 0.3–0.8 倍实时", hw:"硬编约 5–12 倍实时", crf:16},
+  high:{name:"高画质 — 高保真重编码 · 体积明显小于原片", ratio:[0.22,0.45], br:6.0, sw:"软编约 0.6–1.5 倍实时", hw:"硬编约 6–15 倍实时", crf:20},
+  standard:{name:"均衡 — 推荐默认 · 速度与体积兼顾，多数场景的最优解", ratio:[0.18,0.38], br:4.5, sw:"软编约 1–3 倍实时", hw:"硬编约 8–20 倍实时", crf:23},
+  fast:{name:"快速 — 速度优先 · 编码最快、体积最小，画质有可感损失", ratio:[0.12,0.30], br:3.0, sw:"软编约 4–8 倍实时", hw:"硬编约 15–40 倍实时", crf:28},
+};
+const RES_FACTOR = {keep:1, "1920x1080":1, "1280x720":0.62, "854x480":0.42, "640x360":0.30, custom:0.55};
+let cur="standard", mode="crf", crfManual=false, brManual=false, resKey="keep";
+const $ = id => document.getElementById(id);
+const TOTAL = 965.6, DUR = 20*60;  // 演示：本批总时长 20 分钟
+const fmt = n => n>=1024 ? (n/1024).toFixed(1)+" GB" : Math.round(n)+" MB";
+const crfTag = v => v<=16?"极高画质":v<=20?"高画质":v<=26?"中上画质":v<=30?"中等画质":v<=34?"体积优先":"极致压缩";
+
+function refresh(){
+  const m = META[cur], f = RES_FACTOR[resKey];
+  const speed = $("gpu").checked ? m.hw : m.sw;
+  let lo, hi, pill;
+  if(mode === "crf"){
+    // CRF 联动预估：以档位默认 CRF 为基准，每调低 6 体积约 ×2、调高 6 约 ×0.5（x264 经验值）
+    const k = Math.pow(2, (m.crf - $("crf").value) / 6);
+    lo = TOTAL*m.ratio[0]*f*k; hi = TOTAL*m.ratio[1]*f*k;
+    pill = `CRF ${$("crf").value} · 恒定画质/可变码率`;
+  }else{
+    const mbps = +$("br").value * f;
+    lo = hi = mbps*DUR/8;
+    pill = `目标 ${mbps.toFixed(1)} Mbps · 恒定码率`;
+  }
+  $("pi-name").textContent = m.name;
+  $("pi-crf").textContent = pill;
+  $("pi-detail").textContent = mode==="crf"
+    ? `本批 2 个文件共 965.6 MB → 预计约 ${fmt(lo)}–${fmt(hi)} · ${speed} · 实际结果依画面复杂度浮动`
+    : `本批约 20 分钟 × ${(+$("br").value*f).toFixed(1)} Mbps → 精确约 ${fmt(hi)} · ${speed}`;
+  $("est").textContent = lo===hi ? `预计约 ${fmt(hi)}` : `预计约 ${fmt(lo)}–${fmt(hi)}`;
+  $("custom-flag").style.display = (mode==="crf"?crfManual:brManual) ? "" : "none";
+}
+
+/* 档位切换：CRF / 码率全部联动（仅未手动覆盖时） */
+document.querySelectorAll("#seg button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#seg button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); cur = b.dataset.k;
+  if(!crfManual){ $("crf").value = META[cur].crf; $("crf-val").textContent = META[cur].crf; $("crf-tag").textContent = crfTag(META[cur].crf); }
+  if(!brManual){ $("br").value = META[cur].br; $("br-val").textContent = META[cur].br.toFixed(1); }
+  refresh();
+});
+
+/* 模式切换 */
+document.querySelectorAll("#mode-seg button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#mode-seg button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); mode = b.dataset.m;
+  $("zone-crf").style.display = mode==="crf" ? "flex" : "none";
+  $("zone-br").style.display = mode==="bitrate" ? "flex" : "none";
+  $("mode-hint").firstChild.textContent = mode==="crf"
+    ? "给定画质，码率随画面复杂度自动浮动 "
+    : "直接指定输出码率，体积可精确预估，画质随内容波动 ";
+  refresh();
+});
+
+$("crf").oninput = () => {
+  crfManual = true;
+  $("crf-val").textContent = $("crf").value;
+  $("crf-tag").textContent = crfTag(+$("crf").value);
+  refresh();
+};
+$("crf-reset").onclick = () => {
+  crfManual = false;
+  $("crf").value = META[cur].crf;
+  $("crf-val").textContent = META[cur].crf;
+  $("crf-tag").textContent = crfTag(META[cur].crf);
+  refresh();
+};
+$("br").oninput = () => {
+  brManual = true;
+  $("br-val").textContent = (+$("br").value).toFixed(1);
+  refresh();
+};
+$("br-reset").onclick = () => { brManual = false; $("br").value = META[cur].br; $("br-val").textContent = META[cur].br.toFixed(1); refresh(); };
+
+$("res").onchange = () => {
+  resKey = $("res").value;
+  const custom = resKey==="custom";
+  $("res-custom").style.display = custom ? "" : "none";
+  $("res-hint").textContent = custom ? "按指定宽高缩放（偶数）"
+    : resKey==="keep" ? "按原始分辨率输出，不缩放"
+    : `缩放至 ${resKey.replace("x"," × ")} · 目标码率/预估体积按像素比例下调`;
+  refresh();
+};
+
+$("fps").onchange = () => {
+  const custom = $("fps").value==="custom";
+  $("fps-custom").style.display = custom ? "" : "none";
+  $("fps-hint").textContent = custom ? "重编码到指定帧率" : $("fps").value==="keep" ? "不做改动" : `统一为 ${$("fps").value} fps`;
+};
+
+$("gpu").onchange = () => {
+  $("enc-pill").textContent = $("gpu").checked ? "hevc_nvenc" : "软件编码 · libx264";
+  refresh();
+};
+
+$("adv-btn").onclick = () => {
+  const open = $("adv-card").classList.toggle("open");
+  $("adv-btn").textContent = open ? "▴ 收起高级参数（帧率 / 并发 / 命名）" : "▾ 展开高级参数（帧率 / 并发 / 命名）";
+};
+refresh();
+</script>
+</body>
+</html>

@@ -66,6 +66,8 @@ class CompressionTask(QRunnable):
                 encoder=enc,
                 crf=p["crf"],
                 preset=p["preset"],
+                rate_mode=p.get("rate_mode", "crf"),
+                bitrate=float(p.get("bitrate") or 4.5),
                 resolution=p["resolution"],
                 res_w=p.get("resolution_w"),
                 res_h=p.get("resolution_h"),

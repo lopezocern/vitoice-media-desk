@@ -85,6 +85,19 @@ QComboBox:focus,QSpinBox:focus,QLineEdit:focus{border-color:#4f5bd5;}
 /* 切割时间段弹窗：段行卡片 / 紧凑时间栏 / 无效段红框 */
 QWidget#SegCard{background:#fbfcff;border:1px solid #e6eaf3;border-radius:10px;}
 QFrame#PresetInfo{background:#f3f5fd;border:1px solid #e3e7f5;border-radius:9px;}
+/* 码率控制模式区 / 滑杆 / 数值 pill / 迷你按钮 / 已自定义标记 */
+QWidget#ModeZone{background:#fbfcff;border:1px solid #eef1f8;border-radius:9px;}
+QSlider#ParamSlider{background:transparent;min-height:22px;max-height:22px;}
+QSlider#ParamSlider::groove:horizontal{background:#e3e6f0;border-radius:4px;height:4px;}
+QSlider#ParamSlider::sub-page:horizontal{background:#4f5bd5;border-radius:4px;height:4px;}
+QSlider#ParamSlider::handle:horizontal{background:#4f5bd5;border:none;border-radius:7px;width:14px;height:14px;margin:-5px 0 0 0;}
+QSlider#ParamSlider::handle:horizontal:hover{background:#3f49c2;}
+QLabel#RangeVal{color:#4f5bd5;background:#eef0fe;border-radius:8px;padding:5px 10px;font-weight:700;font-size:13px;min-width:40px;}
+QLabel#RangeTag{color:#8b93ab;font-size:11px;min-width:48px;}
+QLabel#ZoneName{color:#5c6478;font-size:12px;font-weight:600;}
+QLabel#CustomTag{color:#b7791f;background:#fdf3e3;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;}
+QPushButton#MiniBtn{background:#ffffff;border:1px solid #dfe3ee;border-radius:7px;padding:4px 10px;font-size:11px;color:#5c6478;font-weight:600;}
+QPushButton#MiniBtn:hover{border-color:#4f5bd5;color:#4f5bd5;background:#f6f7fe;}
 QSpinBox#TSeg{padding:6px 7px;}
 QSpinBox[invalid="true"]{border-color:#d1495b;background:#fff7f8;color:#c93548;}
 /* 编辑态选区必须显式声明：QSS 的 background 会盖掉 palette Highlight，

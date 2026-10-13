@@ -4,52 +4,89 @@
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSpinBox,
-    QVBoxLayout, QWidget,
+    QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSlider,
+    QSpinBox, QVBoxLayout, QWidget,
 )
 
-from .. import state
+from .. import env as appenv, state
 from ..config import AppConfig
 from ..task import CANCELLED, RUNNING, SUCCESS, CompressionTask, TaskPool
 from .widgets import DropBox, HelpLabel, Segmented, TaskRow, form_label, page_head, section_title
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".m4v", ".flv"}
 _SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"]
-_CRF_DEFAULTS = {"balanced": 18, "fast": 26, "ultrafast": 28}
 
-# 档位说明数据：选中档位即在参数卡下方展示这些预估信息（体积/码率/速度）。
+# 四档位（从慢到快）：CRF 16 → 20 → 23 → 28，画质/体积递减、编码速度递增。
 # ratio 为输出体积相对原文件的典型区间（启发式经验值，依内容复杂度浮动）。
+_CRF_DEFAULTS = {"best": 16, "high": 20, "standard": 23, "fast": 28}
+_BR_DEFAULTS = {"best": 8.0, "high": 6.0, "standard": 4.5, "fast": 3.0}
 _SPEED_META = {
-    "ultrafast": {
-        "name": "超快",
-        "tagline": "速度优先 · 编码最快，同等画质下体积偏大",
-        "ratio": (0.40, 0.70),
-        "br": "2–5 Mbps@1080p",
-        "sw": "软编约 8–15 倍实时",
-        "hw": "硬编约 15–40 倍实时",
+    "best": {
+        "name": "极致画质",
+        "tagline": "最高保真 · 压缩幅度温和，体积偏大、耗时最长",
+        "ratio": (0.30, 0.55),
+        "sw": "软编约 0.3–0.8 倍实时",
+        "hw": "硬编约 5–12 倍实时",
     },
-    "balanced": {
-        "name": "平衡",
-        "tagline": "画质优先 · 高保真重编码，体积最小、耗时最长",
-        "ratio": (0.20, 0.50),
-        "br": "4–10 Mbps@1080p",
-        "sw": "软编约 0.8–2 倍实时",
+    "high": {
+        "name": "高画质",
+        "tagline": "高保真重编码 · 体积明显小于原片",
+        "ratio": (0.22, 0.45),
+        "sw": "软编约 0.6–1.5 倍实时",
+        "hw": "硬编约 6–15 倍实时",
+    },
+    "standard": {
+        "name": "均衡",
+        "tagline": "推荐默认 · 速度与体积兼顾，多数场景的最优解",
+        "ratio": (0.18, 0.38),
+        "sw": "软编约 1–3 倍实时",
         "hw": "硬编约 8–20 倍实时",
     },
     "fast": {
         "name": "快速",
-        "tagline": "均衡折中 · 画质中上，速度与体积兼顾",
-        "ratio": (0.25, 0.55),
-        "br": "2.5–6 Mbps@1080p",
-        "sw": "软编约 3–6 倍实时",
-        "hw": "硬编约 12–30 倍实时",
+        "tagline": "速度优先 · 编码最快、体积最小，画质有可感损失",
+        "ratio": (0.12, 0.30),
+        "sw": "软编约 4–8 倍实时",
+        "hw": "硬编约 15–40 倍实时",
     },
 }
+
+# 分辨率降档时，预估体积/有效码率按像素比例近似下调
+_RES_FACTOR = {"keep": 1.0, "1920x1080": 1.0, "1280x720": 0.62,
+               "854x480": 0.42, "640x360": 0.30, "custom": 0.55}
+
+
+def _crf_tag(v: int) -> str:
+    """CRF 值的画质语义标签（滑杆旁）。"""
+    if v <= 16:
+        return "极高画质"
+    if v <= 20:
+        return "高画质"
+    if v <= 26:
+        return "中上画质"
+    if v <= 30:
+        return "中等画质"
+    if v <= 34:
+        return "体积优先"
+    return "极致压缩"
+
+
+def _fmt_duration(secs: float) -> str:
+    """总时长友好显示（码率模式预估用）。"""
+    s = int(secs)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    if h:
+        return f"{h} 小时 {m} 分"
+    if m:
+        return f"{m} 分 {sec} 秒"
+    return f"{sec} 秒"
 
 
 def human_size(n: float) -> str:
@@ -63,6 +100,7 @@ def human_size(n: float) -> str:
 class CompressionPage(QWidget):
     started_all = Signal()
     task_count_changed = Signal(int, int, int)  # running, done, failed
+    durations_ready = Signal()                  # 后台时长探测完成（跨线程排队回主线程）
 
     def __init__(self, pool: TaskPool, parent=None):
         super().__init__(parent)
@@ -71,10 +109,16 @@ class CompressionPage(QWidget):
         self._rows: dict[str, TaskRow] = {}
         self._done = self._failed = self._cancelled = 0
         self._env = None
-        self._user_override_crf = False
+        self._user_override_crf = False   # 手动拖过 CRF：切档位时保留并标「已自定义」
+        self._user_override_br = False    # 手动拖过目标码率
+        self._rate_mode = "crf"           # crf / bitrate
+        self._durations: dict[str, float] = {}  # 文件路径 -> 时长（秒）
+        self._probing = False
 
         self._build_ui()
+        self._restore_config()   # 档位/CRF/码率/模式/分辨率 从配置恢复
         self._refresh_preset_info()  # env 未就绪时也先按默认档位展示说明
+        self.durations_ready.connect(self._on_durations_ready)
         state.state.env_changed.connect(self._on_env_change)
         if state.state.env is not None:
             self._on_env_change()
@@ -139,16 +183,24 @@ class CompressionPage(QWidget):
         form.setVerticalSpacing(10)
 
         f_speed = QHBoxLayout()
-        f_speed.setSpacing(6)
+        f_speed.setSpacing(8)
         self.speed = Segmented([
-            ("超快", "ultrafast"),
-            ("平衡", "balanced"),
+            ("极致画质", "best"),
+            ("高画质", "high"),
+            ("均衡", "standard"),
             ("快速", "fast"),
         ])
-        self.speed.setCurrentData("balanced")
         self.speed.currentChanged.connect(self._on_speed_changed)
         f_speed.addWidget(self.speed)
-        f_speed.addWidget(HelpLabel("处理速度与压缩成效的取舍档。平衡适合绝大多数情况。"))
+        f_speed.addWidget(HelpLabel(
+            "从慢到快：极致画质最保真、耗时最长；快速编码最快、体积最小。"
+            "手动改过的参数会标「已自定义」，切档位时保留。"))
+        self.custom_tag = QLabel("已自定义")
+        self.custom_tag.setObjectName("CustomTag")
+        self.custom_tag.setVisible(False)
+        self.custom_tag.setToolTip(
+            "当前模式的参数已手动修改：切换档位时保留不覆盖；点「恢复档位默认」可重新跟随档位。")
+        f_speed.addWidget(self.custom_tag)
         f_speed.addStretch(1)
         form.addRow(form_label("压缩档位"), f_speed)
 
@@ -176,6 +228,108 @@ class CompressionPage(QWidget):
         self.pi_detail.setWordWrap(True)
         ilay.addWidget(self.pi_detail)
         form.addRow(self.preset_info)
+
+        # 码率控制：CRF（恒定画质）⇄ 目标码率（Mbps）双模式
+        f_rate = QHBoxLayout()
+        f_rate.setSpacing(8)
+        self.rate_mode_seg = Segmented([
+            ("CRF（恒定画质）", "crf"),
+            ("目标码率", "bitrate"),
+        ])
+        self.rate_mode_seg.currentChanged.connect(self._on_rate_mode_changed)
+        f_rate.addWidget(self.rate_mode_seg)
+        f_rate.addWidget(HelpLabel(
+            "CRF：给定期望画质，码率随画面复杂度自动浮动；"
+            "目标码率：直接指定 Mbps，体积按「码率×时长」精确预估。"))
+        f_rate.addStretch(1)
+        form.addRow(form_label("码率控制"), f_rate)
+
+        self.mode_zone = QFrame()
+        self.mode_zone.setObjectName("ModeZone")
+        mz = QHBoxLayout(self.mode_zone)
+        mz.setContentsMargins(10, 8, 10, 8)
+        mz.setSpacing(10)
+
+        # CRF 模式控件：滑杆 0-51 + 数值 pill + 语义标签 + 恢复档位默认
+        self.crf_zone = QWidget()
+        cz = QHBoxLayout(self.crf_zone)
+        cz.setContentsMargins(0, 0, 0, 0)
+        cz.setSpacing(10)
+        crf_name = QLabel("CRF")
+        crf_name.setObjectName("ZoneName")
+        cz.addWidget(crf_name)
+        self.crf_slider = QSlider(Qt.Orientation.Horizontal)
+        self.crf_slider.setObjectName("ParamSlider")
+        self.crf_slider.setRange(0, 51)
+        self.crf_slider.setValue(23)
+        self.crf_slider.valueChanged.connect(self._on_crf_changed)
+        cz.addWidget(self.crf_slider, 1)
+        self.crf_val = QLabel("23")
+        self.crf_val.setObjectName("RangeVal")
+        cz.addWidget(self.crf_val)
+        self.crf_tag = QLabel("中上画质")
+        self.crf_tag.setObjectName("RangeTag")
+        cz.addWidget(self.crf_tag)
+        self.crf_reset = QPushButton("恢复档位默认")
+        self.crf_reset.setObjectName("MiniBtn")
+        self.crf_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.crf_reset.setToolTip("CRF 回到当前档位的默认值，并重新跟随档位联动。")
+        self.crf_reset.clicked.connect(self._on_crf_reset)
+        cz.addWidget(self.crf_reset)
+        mz.addWidget(self.crf_zone, 1)
+
+        # 目标码率模式控件：滑杆 0.5-20 Mbps（内部 ×10）+ 数值 + 恢复档位默认
+        self.br_zone = QWidget()
+        bz = QHBoxLayout(self.br_zone)
+        bz.setContentsMargins(0, 0, 0, 0)
+        bz.setSpacing(10)
+        br_name = QLabel("目标码率")
+        br_name.setObjectName("ZoneName")
+        bz.addWidget(br_name)
+        self.br_slider = QSlider(Qt.Orientation.Horizontal)
+        self.br_slider.setObjectName("ParamSlider")
+        self.br_slider.setRange(5, 200)
+        self.br_slider.setValue(45)
+        self.br_slider.valueChanged.connect(self._on_br_changed)
+        bz.addWidget(self.br_slider, 1)
+        self.br_val = QLabel("4.5")
+        self.br_val.setObjectName("RangeVal")
+        bz.addWidget(self.br_val)
+        br_unit = QLabel("Mbps")
+        br_unit.setObjectName("RangeTag")
+        bz.addWidget(br_unit)
+        self.br_reset = QPushButton("恢复档位默认")
+        self.br_reset.setObjectName("MiniBtn")
+        self.br_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.br_reset.setToolTip("目标码率回到当前档位的建议值，并重新跟随档位联动。")
+        self.br_reset.clicked.connect(self._on_br_reset)
+        bz.addWidget(self.br_reset)
+        bz.addWidget(HelpLabel("预估体积 = 码率 × 总时长 ÷ 8"))
+        self.br_zone.setVisible(False)
+        mz.addWidget(self.br_zone, 1)
+        form.addRow(self.mode_zone)
+
+        # 分辨率：从高级参数上移，预设与转换页对齐
+        f_res = QHBoxLayout()
+        f_res.setSpacing(6)
+        self.res = QComboBox()
+        self.res.addItem("保持原尺寸", "keep")
+        self.res.addItem("1920 × 1080（1080p）", "1920x1080")
+        self.res.addItem("1280 × 720（720p）", "1280x720")
+        self.res.addItem("854 × 480（480p）", "854x480")
+        self.res.addItem("640 × 360（360p）", "640x360")
+        self.res.addItem("自定义宽 × 高", "custom")
+        self.res.currentIndexChanged.connect(self._on_res_changed)
+        f_res.addWidget(self.res)
+        self.res_w = QSpinBox(); self.res_w.setRange(2, 7680); self.res_w.setValue(1920)
+        self.res_h = QSpinBox(); self.res_h.setRange(2, 4320); self.res_h.setValue(1080)
+        self.res_w.setVisible(False); self.res_h.setVisible(False)
+        f_res.addWidget(self.res_w)
+        f_res.addWidget(form_label("×"))
+        f_res.addWidget(self.res_h)
+        f_res.addWidget(HelpLabel("降档分辨率时，说明卡预估按像素比例同步下调。"))
+        f_res.addStretch(1)
+        form.addRow(form_label("分辨率"), f_res)
 
         f_gpu = QHBoxLayout()
         f_gpu.setSpacing(8)
@@ -220,7 +374,7 @@ class CompressionPage(QWidget):
         f_od.addWidget(self.od_pick)
         form.addRow(form_label("输出目录"), f_od)
 
-        self.adv = QPushButton("展开高级参数（CRF / 分辨率 / 帧率 / 并发 / 命名）")
+        self.adv = QPushButton("展开高级参数（帧率 / 并发 / 命名）")
         self.adv.setObjectName("Expander")
         self.adv.setCheckable(True)
         self.adv.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -229,7 +383,7 @@ class CompressionPage(QWidget):
         form.addRow(self.adv)
         blay.addWidget(card)
 
-        # 高级参数（折叠卡片）
+        # 高级参数（折叠卡片）：CRF / 分辨率已上移基础区，仅留低频项
         self.adv_card = QFrame()
         self.adv_card.setObjectName("SettingCard")
         self.adv_card.setVisible(False)
@@ -237,35 +391,6 @@ class CompressionPage(QWidget):
         al.setContentsMargins(16, 14, 16, 14)
         al.setHorizontalSpacing(12)
         al.setVerticalSpacing(10)
-
-        f_crf = QHBoxLayout()
-        f_crf.setSpacing(6)
-        self.crf = QSpinBox()
-        self.crf.setRange(0, 51)
-        self.crf.setValue(AppConfig.instance().crf())
-        self.crf.valueChanged.connect(self._mark_crf_override)
-        f_crf.addWidget(self.crf)
-        f_crf.addWidget(HelpLabel("数值越低越清晰、文件越大（0-51）。默认按速度档自动给出。"))
-        f_crf.addStretch(1)
-        al.addRow(form_label("CRF（画质）"), f_crf)
-
-        f_res = QHBoxLayout()
-        f_res.setSpacing(6)
-        self.res = QComboBox()
-        self.res.addItem("保持原尺寸", "keep")
-        self.res.addItem("统一 1080p", "1080")
-        self.res.addItem("统一 720p", "720")
-        self.res.addItem("指定（宽×高）", "custom")
-        self.res.currentIndexChanged.connect(self._on_res_changed)
-        f_res.addWidget(self.res)
-        self.res_w = QSpinBox(); self.res_w.setRange(2, 7680); self.res_w.setValue(1920)
-        self.res_h = QSpinBox(); self.res_h.setRange(2, 4320); self.res_h.setValue(1080)
-        self.res_w.setVisible(False); self.res_h.setVisible(False)
-        f_res.addWidget(self.res_w)
-        f_res.addWidget(form_label("×"))
-        f_res.addWidget(self.res_h)
-        f_res.addStretch(1)
-        al.addRow(form_label("分辨率"), f_res)
 
         f_fps = QHBoxLayout()
         f_fps.setSpacing(6)
@@ -409,47 +534,183 @@ class CompressionPage(QWidget):
         self.adv.setChecked(on)
         self.adv_card.setVisible(on)
         self.adv.setText(
-            ("收起高级参数（CRF / 分辨率 / 帧率 / 并发 / 命名）  ▴"
+            ("收起高级参数（帧率 / 并发 / 命名）  ▴"
              if on else
-             "展开高级参数（CRF / 分辨率 / 帧率 / 并发 / 命名）  ▾"))
+             "展开高级参数（帧率 / 并发 / 命名）  ▾"))
 
-    def _mark_crf_override(self, _: int) -> None:
-        self._user_override_crf = True
-        self._refresh_preset_info()
-
+    # ---------------- 档位联动（档位 = 预设包） ----------------
     def _on_speed_changed(self) -> None:
+        """切换档位：未手动覆盖的 CRF / 码率跟随档位，已覆盖的保留并标「已自定义」。"""
+        key = self.speed.currentData()
         if not self._user_override_crf:
             # 程序化联动不算“用户手动改”：屏蔽信号避免误置 override 锁死联动
-            self.crf.blockSignals(True)
-            self.crf.setValue(_CRF_DEFAULTS.get(self.speed.currentData(), 18))
-            self.crf.blockSignals(False)
+            self.crf_slider.blockSignals(True)
+            self.crf_slider.setValue(_CRF_DEFAULTS.get(key, 23))
+            self.crf_slider.blockSignals(False)
+            self._sync_crf_labels()
+        if not self._user_override_br:
+            self.br_slider.blockSignals(True)
+            self.br_slider.setValue(round(_BR_DEFAULTS.get(key, 4.5) * 10))
+            self.br_slider.blockSignals(False)
+            self._sync_br_labels()
         self._refresh_preset_info()
 
+    # ---- CRF / 码率滑杆 ----
+    def _on_crf_changed(self, _: int) -> None:
+        self._user_override_crf = True
+        self._sync_crf_labels()
+        self._refresh_preset_info()
+
+    def _on_crf_reset(self) -> None:
+        self._user_override_crf = False
+        self.crf_slider.blockSignals(True)
+        self.crf_slider.setValue(_CRF_DEFAULTS.get(self.speed.currentData(), 23))
+        self.crf_slider.blockSignals(False)
+        self._sync_crf_labels()
+        self._refresh_preset_info()
+
+    def _on_br_changed(self, _: int) -> None:
+        self._user_override_br = True
+        self._sync_br_labels()
+        self._refresh_preset_info()
+
+    def _on_br_reset(self) -> None:
+        self._user_override_br = False
+        self.br_slider.blockSignals(True)
+        self.br_slider.setValue(round(_BR_DEFAULTS.get(self.speed.currentData(), 4.5) * 10))
+        self.br_slider.blockSignals(False)
+        self._sync_br_labels()
+        self._refresh_preset_info()
+
+    def _sync_crf_labels(self) -> None:
+        v = self.crf_slider.value()
+        self.crf_val.setText(str(v))
+        self.crf_tag.setText(_crf_tag(v))
+
+    def _sync_br_labels(self) -> None:
+        self.br_val.setText(f"{self.br_slider.value() / 10:.1f}")
+
+    def _on_rate_mode_changed(self) -> None:
+        self._rate_mode = self.rate_mode_seg.currentData() or "crf"
+        crf_mode = self._rate_mode == "crf"
+        self.crf_zone.setVisible(crf_mode)
+        self.br_zone.setVisible(not crf_mode)
+        self._refresh_preset_info()
+
+    # ---------------- 配置恢复 ----------------
+    def _restore_config(self) -> None:
+        """启动时恢复上次的档位/CRF/码率/模式/分辨率（含旧版三档迁移值）。"""
+        cfg = AppConfig.instance()
+        sm = cfg.get_compress("speed_mode") or "standard"
+        if sm not in _SPEED_META:
+            sm = "standard"
+        self.speed.setCurrentData(sm)  # emit → CRF/码率联动到该档位默认值
+
+        crf_saved = cfg.get_compress("crf")
+        crf_v = int(crf_saved) if crf_saved not in (None, "") else _CRF_DEFAULTS[sm]
+        if crf_v != _CRF_DEFAULTS[sm]:
+            self._user_override_crf = True
+            self.crf_slider.blockSignals(True)
+            self.crf_slider.setValue(crf_v)
+            self.crf_slider.blockSignals(False)
+            self._sync_crf_labels()
+
+        br_saved = cfg.get_compress("bitrate")
+        br_v = float(br_saved) if br_saved else _BR_DEFAULTS[sm]
+        if abs(br_v - _BR_DEFAULTS[sm]) > 0.01:
+            self._user_override_br = True
+            self.br_slider.blockSignals(True)
+            self.br_slider.setValue(round(br_v * 10))
+            self.br_slider.blockSignals(False)
+            self._sync_br_labels()
+
+        self._rate_mode = "bitrate" if cfg.get_compress("rate_mode") == "bitrate" else "crf"
+        self.rate_mode_seg.setCurrentData(self._rate_mode)  # emit → 切换 zone + 刷新说明卡
+
+        res_saved = cfg.get_compress("resolution") or "keep"
+        res_saved = {"1080": "1920x1080", "720": "1280x720"}.get(res_saved, res_saved)
+        idx = self.res.findData(res_saved)
+        self.res.setCurrentIndex(idx if idx >= 0 else 0)  # emit → _on_res_changed
+        if res_saved == "custom":
+            self.res_w.setValue(int(cfg.get_compress("resolution_w") or 1920))
+            self.res_h.setValue(int(cfg.get_compress("resolution_h") or 1080))
+
+    # ---------------- 说明卡（全联动） ----------------
     def _refresh_preset_info(self) -> None:
-        """档位/文件列表/GPU 任一变化时，更新说明卡的预估信息。"""
+        """档位/CRF/码率/模式/分辨率/文件列表/GPU 任一变化时，更新说明卡预估。"""
         key = self.speed.currentData()
-        m = _SPEED_META.get(key, _SPEED_META["balanced"])
-        env = state.state.env
-        hw = self.gpu.isChecked() and env is not None and bool(env.gpu_encoders)
-        lo, hi = m["ratio"]
+        m = _SPEED_META.get(key, _SPEED_META["standard"])
+        envst = state.state.env
+        hw = self.gpu.isChecked() and envst is not None and bool(envst.gpu_encoders)
+        speed_txt = m["hw"] if hw else m["sw"]
+        f = _RES_FACTOR.get(self.res.currentData(), 1.0)
         try:
             total = sum(Path(k).stat().st_size for k in self._tasks)
         except OSError:
             total = 0
-        if total > 0:
-            size = (f"本批 {len(self._tasks)} 个文件共 {human_size(total)}"
-                    f" → 预计约 {human_size(total * lo)}–{human_size(total * hi)}")
+
+        if self._rate_mode == "crf":
+            # CRF 联动预估：以档位默认 CRF 为基准，
+            # 每调低 6 体积约 ×2、调高 6 约 ×0.5（x264 经验值）
+            crf = self.crf_slider.value()
+            k = 2 ** ((_CRF_DEFAULTS.get(key, 23) - crf) / 6)
+            lo, hi = m["ratio"][0] * f * k, m["ratio"][1] * f * k
+            if total > 0:
+                size = (f"本批 {len(self._tasks)} 个文件共 {human_size(total)}"
+                        f" → 预计约 {human_size(total * lo)}–{human_size(total * hi)}")
+            else:
+                size = f"预估体积约为原文件的 {round(lo * 100)}%–{round(hi * 100)}%"
+            self.pi_crf.setText(f"CRF {crf} · 恒定画质/可变码率")
+            detail = f"{size} · {speed_txt} · 实际结果依画面复杂度浮动"
         else:
-            size = f"预估体积约为原文件的 {round(lo * 100)}%–{round(hi * 100)}%"
-        speed = m["hw"] if hw else m["sw"]
+            # 目标码率模式：预估体积 = 码率 × 总时长 ÷ 8，精确可预估
+            mbps = self.br_slider.value() / 10 * f
+            total_dur = sum(self._durations.get(k, 0.0) for k in self._tasks)
+            if total > 0 and total_dur > 0:
+                est_bytes = mbps * total_dur / 8 * 1024 * 1024
+                size = (f"本批 {len(self._tasks)} 个 · 约 {_fmt_duration(total_dur)}"
+                        f" × {mbps:.1f} Mbps → 精确约 {human_size(est_bytes)}")
+            elif total > 0:
+                size = f"正在读取本批总时长，稍候按 {mbps:.1f} Mbps 精确预估…"
+            else:
+                size = f"体积 = {mbps:.1f} Mbps × 总时长 ÷ 8，可精确预估"
+            self.pi_crf.setText(f"目标 {mbps:.1f} Mbps · 恒定码率")
+            detail = f"{size} · {speed_txt}"
+
         self.pi_name.setText(f"{m['name']} — {m['tagline']}")
-        self.pi_crf.setText(f"CRF {self.crf.value()} · 恒定画质/可变码率")
-        self.pi_detail.setText(
-            f"{size} · {speed} · 典型码率 {m['br']} · 实际结果依画面复杂度浮动")
+        self.pi_detail.setText(detail)
+        overridden = (self._user_override_crf if self._rate_mode == "crf"
+                      else self._user_override_br)
+        self.custom_tag.setVisible(overridden)
 
     def _on_res_changed(self) -> None:
         show = self.res.currentData() == "custom"
         self.res_w.setVisible(show); self.res_h.setVisible(show)
+        self._refresh_preset_info()
+
+    # ---------------- 时长探测（码率模式的预估需要总时长） ----------------
+    def _schedule_probe(self) -> None:
+        """后台线程 ffprobe 本批未探测文件的时长，完成后经信号回主线程刷新。"""
+        todo = [k for k in self._tasks if k not in self._durations]
+        if not todo or self._probing:
+            return
+        self._probing = True
+
+        def worker() -> None:
+            try:
+                for k in todo:
+                    if k not in self._tasks:  # 探测期间已被移除
+                        continue
+                    ms = appenv.probe_duration_ms(Path(k))
+                    self._durations[k] = (ms or 0) / 1000
+            finally:
+                self._probing = False
+                self.durations_ready.emit()  # 跨线程自动排队到主线程
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_durations_ready(self) -> None:
+        self._refresh_preset_info()
 
     def _on_fps_changed(self) -> None:
         self.fps_v.setVisible(self.fps.currentData() == "custom")
@@ -498,6 +759,7 @@ class CompressionPage(QWidget):
         self._rows[str(p)] = row
         self._tasks[str(p)] = None
         self._refresh_summary()
+        self._schedule_probe()
         self._refresh_preset_info()
 
     def _remove_row(self, src: Path) -> None:
@@ -525,7 +787,9 @@ class CompressionPage(QWidget):
         custom_res = self.res.currentData() == "custom"
         params = {
             "encoder": enc,
-            "crf": self.crf.value(),
+            "crf": self.crf_slider.value(),
+            "rate_mode": self._rate_mode,
+            "bitrate": self.br_slider.value() / 10,
             "preset": cfg.preset(),
             "resolution": self.res.currentData(),
             "resolution_w": self.res_w.value() if custom_res else None,
@@ -535,8 +799,13 @@ class CompressionPage(QWidget):
             "suffix": self.suffix_edit.text().strip() or "_compressed",
         }
         cfg.set_compress("speed_mode", self.speed.currentData())
-        cfg.set_compress("crf", self.crf.value())
+        cfg.set_compress("crf", self.crf_slider.value())
+        cfg.set_compress("rate_mode", self._rate_mode)
+        cfg.set_compress("bitrate", params["bitrate"])
         cfg.set_compress("resolution", self.res.currentData())
+        if custom_res:
+            cfg.set_compress("resolution_w", self.res_w.value())
+            cfg.set_compress("resolution_h", self.res_h.value())
         cfg.set_compress("fps", self.fps.currentData())
         cfg.set_compress("concurrency", self.conc.value())
         cfg.set_compress("suffix", params["suffix"])

@@ -25,10 +25,11 @@ DEFAULTS: dict[str, Any] = {
     "gpu_enabled": True,        # 是否允许硬件编码
     "gpu_encoder": "auto",      # auto=按检测优先序 / 指定 hevc_nvenc|h264_nvenc
     "compress": {
-        "speed_mode": "balanced",      # balanced / fast / ultrafast
-        "crf": None,                   # None => 按速度档取默认
-        "bitrate_mode": "auto",        # auto / fixed / targetsize
-        "resolution": "keep",          # keep / 1080 / 720 / custom
+        "speed_mode": "standard",      # best / high / standard / fast（从慢到快）
+        "crf": None,                   # None => 按档位取默认
+        "rate_mode": "crf",            # crf=恒定画质 / bitrate=目标码率(Mbps)
+        "bitrate": 4.5,                # 目标码率 Mbps（rate_mode=bitrate 时生效）
+        "resolution": "keep",          # keep / 1920x1080 / 1280x720 / 854x480 / 640x360 / custom
         "resolution_w": 1920,
         "resolution_h": 1080,
         "fps": "keep",                 # keep / custom
@@ -61,8 +62,11 @@ DEFAULTS: dict[str, Any] = {
     "log_enabled": True,
 }
 
-CRF_BY_SPEED = {"balanced": 18, "fast": 26, "ultrafast": 28}
-PRESET_BY_SPEED = {"balanced": "medium", "fast": "fast", "ultrafast": "ultrafast"}
+# 四档位（从慢到快）：CRF 越低画质/体积越高、编码越慢
+CRF_BY_SPEED = {"best": 16, "high": 20, "standard": 23, "fast": 28}
+PRESET_BY_SPEED = {"best": "slow", "high": "medium", "standard": "fast", "fast": "veryfast"}
+# 旧版三档 speed_mode → 四档迁移映射
+_LEGACY_SPEED = {"balanced": "high", "fast": "standard", "ultrafast": "fast"}
 
 
 class AppConfig:
@@ -93,6 +97,11 @@ class AppConfig:
         merged["concat"] = {**DEFAULTS["concat"], **raw.get("concat", {})}
         merged["convert"] = {**DEFAULTS["convert"], **raw.get("convert", {})}
         self._data = merged
+        # 旧版三档 speed_mode 迁移到四档（一次归一化，避免下游 KeyError）
+        sm = self._data["compress"].get("speed_mode")
+        if sm in _LEGACY_SPEED:
+            self._data["compress"]["speed_mode"] = _LEGACY_SPEED[sm]
+            self.save()
 
     def save(self) -> None:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -145,10 +154,12 @@ class AppConfig:
     # ---- 便捷派生态度 ----
     def crf(self) -> int:
         v = self._data["compress"].get("crf")
-        return int(v) if v else CRF_BY_SPEED[self._data["compress"]["speed_mode"]]
+        if v:
+            return int(v)
+        return CRF_BY_SPEED.get(self._data["compress"].get("speed_mode"), 23)
 
     def preset(self) -> str:
-        return PRESET_BY_SPEED[self._data["compress"]["speed_mode"]]
+        return PRESET_BY_SPEED.get(self._data["compress"].get("speed_mode"), "fast")
 
     def concurrency(self) -> int:
         c = int(self._data["compress"].get("concurrency") or 0)

@@ -66,7 +66,8 @@ def main() -> int:
         ("压缩页含添加按钮", hasattr(comp, "add_btn")),
         ("压缩页含开始按钮", hasattr(comp, "start_btn")),
         ("压缩页含编码器标签", hasattr(comp, "enc_lbl")),
-        ("压缩页含 CRF", hasattr(comp, "crf")),
+        ("压缩页含 CRF", hasattr(comp, "crf_slider")),
+        ("压缩页含码率模式", hasattr(comp, "rate_mode_seg")),
         ("压缩页含分辨率", hasattr(comp, "res")),
         ("切割页含模式选择", hasattr(cut, "mode")),
         ("切割页含 CRF", hasattr(cut, "crf")),
@@ -127,6 +128,11 @@ def main() -> int:
     nv = " ".join(build_compress_cmd("a.mp4", "o.mp4", "hevc_nvenc", 18, "medium",
                                      "keep", None, None, "keep", 30))
     check("nvenc 用 -cq 与 p4", "-cq" in nv and "p4" in nv, nv)
+
+    br = " ".join(build_compress_cmd("a.mp4", "o.mp4", "libx264", 23, "fast",
+                                     "1280x720", None, None, "keep", 30,
+                                     rate_mode="bitrate", bitrate=6.0))
+    check("码率模式含 -b:v", "-b:v" in br and "6M" in br and "-crf" not in br, br)
 
     print("== 5) 切割命令构建（离线断言） ==")
     rc = " ".join(build_cut_cmd("a.mp4", "o.mp4", "00:00:00", "00:01:30",
