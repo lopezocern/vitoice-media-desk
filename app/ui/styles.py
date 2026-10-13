@@ -86,6 +86,10 @@ QComboBox:focus,QSpinBox:focus,QLineEdit:focus{border-color:#4f5bd5;}
 QWidget#SegCard{background:#fbfcff;border:1px solid #e6eaf3;border-radius:10px;}
 QSpinBox#TSeg{padding:6px 7px;}
 QSpinBox[invalid="true"]{border-color:#d1495b;background:#fff7f8;color:#c93548;}
+/* 编辑态选区必须显式声明：QSS 的 background 会盖掉 palette Highlight，
+   选中文字若仍取白色 HighlightedText 就会“白字配浅底”而不可见 */
+QSpinBox{selection-background-color:#4f5bd5;selection-color:#ffffff;}
+QDoubleSpinBox{selection-background-color:#4f5bd5;selection-color:#ffffff;}
 QCheckBox#AdvToggle{font-size:12.5px;color:#3a4256;font-weight:600;}
 QPushButton#Expander{background:transparent;border:none;color:#4f5bd5;font-size:12.5px;font-weight:600;
   text-align:left;padding:4px 2px;border-radius:6px;}
