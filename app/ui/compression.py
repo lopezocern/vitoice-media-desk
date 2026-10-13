@@ -22,6 +22,35 @@ VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".m4v", ".flv"}
 _SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"]
 _CRF_DEFAULTS = {"balanced": 18, "fast": 26, "ultrafast": 28}
 
+# 档位说明数据：选中档位即在参数卡下方展示这些预估信息（体积/码率/速度）。
+# ratio 为输出体积相对原文件的典型区间（启发式经验值，依内容复杂度浮动）。
+_SPEED_META = {
+    "ultrafast": {
+        "name": "超快",
+        "tagline": "速度优先 · 编码最快，同等画质下体积偏大",
+        "ratio": (0.40, 0.70),
+        "br": "2–5 Mbps@1080p",
+        "sw": "软编约 8–15 倍实时",
+        "hw": "硬编约 15–40 倍实时",
+    },
+    "balanced": {
+        "name": "平衡",
+        "tagline": "画质优先 · 高保真重编码，体积最小、耗时最长",
+        "ratio": (0.20, 0.50),
+        "br": "4–10 Mbps@1080p",
+        "sw": "软编约 0.8–2 倍实时",
+        "hw": "硬编约 8–20 倍实时",
+    },
+    "fast": {
+        "name": "快速",
+        "tagline": "均衡折中 · 画质中上，速度与体积兼顾",
+        "ratio": (0.25, 0.55),
+        "br": "2.5–6 Mbps@1080p",
+        "sw": "软编约 3–6 倍实时",
+        "hw": "硬编约 12–30 倍实时",
+    },
+}
+
 
 def human_size(n: float) -> str:
     v = float(n)
@@ -45,6 +74,7 @@ class CompressionPage(QWidget):
         self._user_override_crf = False
 
         self._build_ui()
+        self._refresh_preset_info()  # env 未就绪时也先按默认档位展示说明
         state.state.env_changed.connect(self._on_env_change)
         if state.state.env is not None:
             self._on_env_change()
@@ -121,6 +151,31 @@ class CompressionPage(QWidget):
         f_speed.addWidget(HelpLabel("处理速度与压缩成效的取舍档。平衡适合绝大多数情况。"))
         f_speed.addStretch(1)
         form.addRow(form_label("压缩档位"), f_speed)
+
+        # 档位说明卡：选中哪个档位，就展示该档位的取舍说明与预估体积/码率/速度
+        self.preset_info = QFrame()
+        self.preset_info.setObjectName("PresetInfo")
+        ilay = QVBoxLayout(self.preset_info)
+        ilay.setContentsMargins(12, 9, 12, 9)
+        ilay.setSpacing(3)
+        ihead = QHBoxLayout()
+        ihead.setSpacing(8)
+        self.pi_name = QLabel("")
+        self.pi_name.setStyleSheet(
+            "font-size:12.5px;font-weight:700;color:#1c2333;")
+        self.pi_crf = QLabel("")
+        self.pi_crf.setStyleSheet(
+            "font-size:11px;font-weight:600;color:#4f5bd5;"
+            "background:#eef0fe;border-radius:999px;padding:2px 10px;")
+        ihead.addWidget(self.pi_name)
+        ihead.addStretch(1)
+        ihead.addWidget(self.pi_crf)
+        ilay.addLayout(ihead)
+        self.pi_detail = QLabel("")
+        self.pi_detail.setStyleSheet("color:#5c6478;font-size:11.5px;")
+        self.pi_detail.setWordWrap(True)
+        ilay.addWidget(self.pi_detail)
+        form.addRow(self.preset_info)
 
         f_gpu = QHBoxLayout()
         f_gpu.setSpacing(8)
@@ -288,6 +343,7 @@ class CompressionPage(QWidget):
         self.gpu.blockSignals(True)
         self.gpu.setChecked(cfg_on)
         self.gpu.blockSignals(False)
+        self._refresh_preset_info()
         # 选择框：自动 + 已检出的硬编（剔除失效的持久化选择）
         encoders = self._env.gpu_encoders or []
         self.gpu_sel.blockSignals(True)
@@ -359,10 +415,37 @@ class CompressionPage(QWidget):
 
     def _mark_crf_override(self, _: int) -> None:
         self._user_override_crf = True
+        self._refresh_preset_info()
 
     def _on_speed_changed(self) -> None:
         if not self._user_override_crf:
+            # 程序化联动不算“用户手动改”：屏蔽信号避免误置 override 锁死联动
+            self.crf.blockSignals(True)
             self.crf.setValue(_CRF_DEFAULTS.get(self.speed.currentData(), 18))
+            self.crf.blockSignals(False)
+        self._refresh_preset_info()
+
+    def _refresh_preset_info(self) -> None:
+        """档位/文件列表/GPU 任一变化时，更新说明卡的预估信息。"""
+        key = self.speed.currentData()
+        m = _SPEED_META.get(key, _SPEED_META["balanced"])
+        env = state.state.env
+        hw = self.gpu.isChecked() and env is not None and bool(env.gpu_encoders)
+        lo, hi = m["ratio"]
+        try:
+            total = sum(Path(k).stat().st_size for k in self._tasks)
+        except OSError:
+            total = 0
+        if total > 0:
+            size = (f"本批 {len(self._tasks)} 个文件共 {human_size(total)}"
+                    f" → 预计约 {human_size(total * lo)}–{human_size(total * hi)}")
+        else:
+            size = f"预估体积约为原文件的 {round(lo * 100)}%–{round(hi * 100)}%"
+        speed = m["hw"] if hw else m["sw"]
+        self.pi_name.setText(f"{m['name']} — {m['tagline']}")
+        self.pi_crf.setText(f"CRF {self.crf.value()} · 恒定画质/可变码率")
+        self.pi_detail.setText(
+            f"{size} · {speed} · 典型码率 {m['br']} · 实际结果依画面复杂度浮动")
 
     def _on_res_changed(self) -> None:
         show = self.res.currentData() == "custom"
@@ -415,6 +498,7 @@ class CompressionPage(QWidget):
         self._rows[str(p)] = row
         self._tasks[str(p)] = None
         self._refresh_summary()
+        self._refresh_preset_info()
 
     def _remove_row(self, src: Path) -> None:
         k = str(src)
@@ -427,6 +511,7 @@ class CompressionPage(QWidget):
             row.setParent(None)
             row.deleteLater()
         self._refresh_summary()
+        self._refresh_preset_info()
 
     # ---------------- 运行 ----------------
     def _start(self) -> None:

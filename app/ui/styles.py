@@ -84,6 +84,7 @@ QComboBox:hover,QSpinBox:hover,QLineEdit:hover{border-color:#aeb7d8;}
 QComboBox:focus,QSpinBox:focus,QLineEdit:focus{border-color:#4f5bd5;}
 /* 切割时间段弹窗：段行卡片 / 紧凑时间栏 / 无效段红框 */
 QWidget#SegCard{background:#fbfcff;border:1px solid #e6eaf3;border-radius:10px;}
+QFrame#PresetInfo{background:#f3f5fd;border:1px solid #e3e7f5;border-radius:9px;}
 QSpinBox#TSeg{padding:6px 7px;}
 QSpinBox[invalid="true"]{border-color:#d1495b;background:#fff7f8;color:#c93548;}
 /* 编辑态选区必须显式声明：QSS 的 background 会盖掉 palette Highlight，
