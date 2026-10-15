@@ -15,12 +15,27 @@ from typing import Callable, Optional, Sequence
 from .env import ffmpeg_exe, ffprobe_exe, probe_duration_ms
 
 
-def _enc_args(encoder: str, crf: int, preset: str) -> list[str]:
-    """根据编码器类型生成视频编码参数（硬件/软件语义不同）。"""
+# NVENC 硬编 preset 与软编 preset 的映射（p1 最慢/最高画质 → p7 最快）。
+# 全项目唯一映射来源：压缩/切割/拼接/转换共用，避免多处映射漂移。
+_NVENC_PRESET = {"slow": "p2", "medium": "p4", "fast": "p5",
+                 "veryfast": "p7", "ultrafast": "p7"}
+
+
+def _enc_args(encoder: str, crf: int, preset: str,
+              rate_mode: str = "crf", bitrate: float = 4.5) -> list[str]:
+    """根据编码器类型生成视频编码参数（硬件/软件语义不同）。
+
+    码率控制双模式：crf=恒定画质（软编 -crf / 硬编 -cq）；
+    bitrate=目标码率（-b:v Mbps）。
+    """
+    args = ["-c:v", encoder]
     if "nvenc" in encoder:
-        hw_preset = {"medium": "p4", "fast": "p5", "ultrafast": "p7"}.get(preset, "p4")
-        return ["-c:v", encoder, "-preset", hw_preset, "-cq", str(crf)]
-    return ["-c:v", encoder, "-preset", preset, "-crf", str(crf)]
+        args += ["-preset", _NVENC_PRESET.get(preset, "p4")]
+    else:
+        args += ["-preset", preset]
+    if rate_mode == "bitrate":
+        return args + ["-b:v", f"{bitrate:g}M"]
+    return args + (["-cq", str(crf)] if "nvenc" in encoder else ["-crf", str(crf)])
 
 
 def build_compress_cmd(
@@ -60,22 +75,8 @@ def build_compress_cmd(
     if fps == "custom" and fps_value > 0:
         cmd += ["-r", str(fps_value)]
 
-    is_nvenc = "nvenc" in encoder
-    if is_nvenc:
-        # NVIDIA 硬件编码：quality 与 preset 的参数语义与软件不同
-        hw_preset = {"slow": "p2", "medium": "p4", "fast": "p5",
-                     "veryfast": "p7", "ultrafast": "p7"}.get(preset, "p4")
-        cmd += ["-c:v", encoder, "-preset", hw_preset]
-        if rate_mode == "bitrate":
-            cmd += ["-b:v", f"{bitrate:g}M"]
-        else:
-            cmd += ["-cq", str(crf)]
-    else:
-        cmd += ["-c:v", encoder, "-preset", preset]
-        if rate_mode == "bitrate":
-            cmd += ["-b:v", f"{bitrate:g}M"]
-        else:
-            cmd += ["-crf", str(crf)]
+    # 编码参数统一走 _enc_args（NVENC preset 映射 / 码率双模式全项目单源）
+    cmd += _enc_args(encoder, crf, preset, rate_mode, bitrate)
 
     cmd += ["-c:a", "copy"]
     cmd += ["-progress", "pipe:1", "-nostats", output_path]
@@ -138,12 +139,27 @@ def run_ffmpeg(cmd: Sequence[str], total_ms: int, on_progress: _ProgressCb,
     return proc.returncode, "".join(stderr_chunks)
 
 
+def _unoccupied(path: Path) -> Path:
+    """目标已存在时加 -2/-3 序号避让，绝不覆盖既有文件。"""
+    if not path.exists():
+        return path
+    stem, ext = path.stem, path.suffix
+    for i in range(2, 1000):
+        cand = path.with_name(f"{stem}-{i}{ext}")
+        if not cand.exists():
+            return cand
+    raise FileExistsError(f"输出路径冲突且无法避让：{path}")
+
+
 def resolve_output(input_path: str, output_dir: str, suffix: str) -> str:
-    """根据源文件与输出目录/后缀，生成实际输出路径（保留扩展名）。"""
+    """根据源文件与输出目录/后缀，生成实际输出路径（保留扩展名）。
+
+    目标已存在时自动加 -2/-3 序号避让（不覆盖既有输出）。
+    """
     from pathlib import Path
     src = Path(input_path)
     stem, ext = src.stem, src.suffix or ".mp4"
-    return str(Path(output_dir) / f"{stem}{suffix}{ext}")
+    return str(_unoccupied(Path(output_dir) / f"{stem}{suffix}{ext}"))
 
 
 # ---- 切割 ----

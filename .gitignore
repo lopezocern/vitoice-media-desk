@@ -23,4 +23,4 @@ legacy_scripts/tele_tools/.env
 tele_tools/.env
 
 # 运行期
-*.log
+*.log.workbuddy/

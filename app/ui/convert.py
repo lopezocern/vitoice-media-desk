@@ -244,10 +244,13 @@ class ConvertPage(QWidget):
         self._update_enc()
 
     def _on_gpu_toggled(self, checked: bool) -> None:
-        # 勾选 GPU 时给出是否有可用硬编的提示
+        # 与压缩页/设置页同一机制：落库 gpu_enabled + env_changed 广播，
+        # 三页勾选态互相同步（本页 _sync_gpu_enabled 随广播回读全局值）。
         if checked and self._env is not None and not self._env.gpu_encoders:
             QMessageBox.information(
                 self, "提示", "当前环境未检测到可用的 NVIDIA 硬件编码，将回退到软件编码。")
+        AppConfig.instance().set("gpu_enabled", bool(checked))
+        state.state.env_changed.emit()
         self._update_enc()
 
     def _update_enc(self) -> None:
@@ -323,7 +326,7 @@ class ConvertPage(QWidget):
 
     def _remove(self, key: str) -> None:
         task = self._tasks.get(key)
-        if task is not None and task.status is RUNNING:
+        if task is not None and task.status == RUNNING:
             task.request_stop()
         self._tasks.pop(key, None)
         row = self._rows.pop(key, None)
@@ -367,7 +370,6 @@ class ConvertPage(QWidget):
         }
         cfg.set_convert("fmt", fmt)
         cfg.set_convert("quality", quality)
-        cfg.set_convert("gpu", want_gpu)
         cfg.set_convert("audio", params["audio"])
         cfg.set_convert("audio_only", audio_only)
         cfg.set_convert("resolution", self.res.currentData())
@@ -388,7 +390,7 @@ class ConvertPage(QWidget):
 
     def _stop_all(self) -> None:
         for t in self._tasks.values():
-            if t is not None and t.status is RUNNING:
+            if t is not None and t.status == RUNNING:
                 t.request_stop()
 
     # ---- 事件 ----
@@ -402,10 +404,10 @@ class ConvertPage(QWidget):
         row = self._rows.get(task.input_path)
         if row is None:
             return
-        if task.status is SUCCESS:
+        if task.status == SUCCESS:
             row.set_done(True, Path(task.output_path).name)
             self._done += 1
-        elif task.status is CANCELLED:
+        elif task.status == CANCELLED:
             row.set_cancelled()
             self._cancelled += 1
         else:
@@ -417,9 +419,9 @@ class ConvertPage(QWidget):
         self.summary.setText(
             f"共 {len(self._tasks)} 个 ｜ 完成 {self._done} ｜ 失败 {self._failed} ｜ 取消 {self._cancelled}")
         self.empty_hint.setVisible(len(self._tasks) == 0)
-        running = sum(1 for t in self._tasks.values() if t and t.status is RUNNING)
+        running = sum(1 for t in self._tasks.values() if t and t.status == RUNNING)
         self.task_count_changed.emit(running, self._done, self._failed)
 
     def snapshot_counts(self) -> tuple[int, int, int]:
-        running = sum(1 for t in self._tasks.values() if t and t.status is RUNNING)
+        running = sum(1 for t in self._tasks.values() if t and t.status == RUNNING)
         return running, self._done, self._failed

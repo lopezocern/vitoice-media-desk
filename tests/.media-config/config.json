@@ -5,7 +5,7 @@
   "gpu_enabled": true,
   "gpu_encoder": "auto",
   "compress": {
-    "speed_mode": "high",
+    "speed_mode": "standard",
     "crf": null,
     "rate_mode": "crf",
     "bitrate": 4.5,
@@ -15,8 +15,7 @@
     "fps": "keep",
     "fps_value": 30,
     "suffix": "_compressed",
-    "concurrency": 0,
-    "bitrate_mode": "auto"
+    "concurrency": 0
   },
   "cut": {
     "mode": "reencode",
@@ -35,7 +34,6 @@
     "quality": "balance",
     "resolution": "keep",
     "custom_res": "",
-    "gpu": false,
     "audio": "keep",
     "prefer_soft": true,
     "audio_only": false

@@ -765,7 +765,7 @@ class CompressionPage(QWidget):
     def _remove_row(self, src: Path) -> None:
         k = str(src)
         task = self._tasks.get(k)
-        if task and task.status is RUNNING:
+        if task and task.status == RUNNING:
             task.request_stop()
         self._tasks.pop(k, None)
         row = self._rows.pop(k, None)
@@ -826,7 +826,7 @@ class CompressionPage(QWidget):
 
     def _stop_all(self) -> None:
         for t in self._tasks.values():
-            if t is not None and t.status is RUNNING:
+            if t is not None and t.status == RUNNING:
                 t.request_stop()
 
     # ---------------- 事件 ----------------
@@ -840,12 +840,12 @@ class CompressionPage(QWidget):
         row = self._rows.get(task.input_path)
         if row is None:
             return
-        if task.status is SUCCESS:
+        if task.status == SUCCESS:
             ratio = task.size_ratio()
             row.set_done(True, f"{human_size(task.result_size)}（{ratio:.0%}）",
                          f"输出：{Path(task.output_path).name}")
             self._done += 1
-        elif task.status is CANCELLED:
+        elif task.status == CANCELLED:
             row.set_cancelled()
             self._cancelled += 1
         else:
@@ -857,9 +857,9 @@ class CompressionPage(QWidget):
         self.summary.setText(
             f"共 {len(self._tasks)} 个 ｜ 完成 {self._done} ｜ 失败 {self._failed} ｜ 取消 {self._cancelled}")
         self.empty_hint.setVisible(len(self._tasks) == 0)
-        running = sum(1 for t in self._tasks.values() if t and t.status is RUNNING)
+        running = sum(1 for t in self._tasks.values() if t and t.status == RUNNING)
         self.task_count_changed.emit(running, self._done, self._failed)
 
     def snapshot_counts(self) -> tuple[int, int, int]:
-        running = sum(1 for t in self._tasks.values() if t and t.status is RUNNING)
+        running = sum(1 for t in self._tasks.values() if t and t.status == RUNNING)
         return running, self._done, self._failed

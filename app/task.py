@@ -7,6 +7,7 @@ TaskPool 用 QThreadPool 限制并发数（阶段一由设置或 config 控制�
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
@@ -14,13 +15,30 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from . import env
 from .config import AppConfig
 from .ffmpeg_runner import (
-    build_audio_extract_cmd, build_compress_cmd, build_concat_cmd,
+    _unoccupied, build_audio_extract_cmd, build_compress_cmd, build_concat_cmd,
     build_convert_cmd, build_cut_cmd, parse_time_to_secs, resolve_output,
     run_ffmpeg, write_concat_list,
 )
 
 # 任务状态
 RUNNING, SUCCESS, FAILED, CANCELLED = "running", "success", "failed", "cancelled"
+
+
+def _cleanup_partial(path: str, protect: tuple[str, ...] = ()) -> None:
+    """删除取消/失败遗留的半成品输出文件。
+
+    protect 内的路径（源输入）经 resolve 比对后绝不删除——
+    防止「自定义输出目录=源目录 + 同名」场景误删源文件。
+    """
+    try:
+        p = Path(path)
+        rp = p.resolve()
+        for s in protect:
+            if rp == Path(s).resolve():
+                return
+        p.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 class CompressionTaskSignals(QObject):
@@ -39,7 +57,7 @@ class CompressionTask(QRunnable):
         self.progress_pct = 0
         self.orig_size = Path(input_path).stat().st_size if Path(input_path).exists() else 0
         self.result_size = 0
-        self._stop = __import__("threading").Event()
+        self._stop = threading.Event()
         self._signals = CompressionTaskSignals()
 
     # ---- 公共信号访问 ----
@@ -84,6 +102,7 @@ class CompressionTask(QRunnable):
             )
 
             if self._stop.is_set():
+                _cleanup_partial(self.output_path, (self.input_path,))
                 self.status = CANCELLED
                 self.message = "已取消"
             elif code == 0 and Path(self.output_path).exists():
@@ -91,6 +110,7 @@ class CompressionTask(QRunnable):
                 self.status = SUCCESS
                 self.progress_pct = 100
             else:
+                _cleanup_partial(self.output_path, (self.input_path,))
                 self.status = FAILED
                 self.message = _tail(stderr) or f"ffmpeg 退出码 {code}"
             self._signals.finished.emit(self)
@@ -138,7 +158,7 @@ class CutTask(QRunnable):
         self.message = ""
         self.outputs: list[str] = []
         self.progress_pct = 0
-        self._stop = __import__("threading").Event()
+        self._stop = threading.Event()
         self._signals = CutTaskSignals()
 
     @property
@@ -182,7 +202,7 @@ class CutTask(QRunnable):
 
             done_ms = 0
             for i, (s_sec, _, d_sec) in enumerate(durations, 1):
-                output_path = str(out_dir / f"{stem}_{i}{ext}")
+                output_path = str(_unoccupied(out_dir / f"{stem}_{i}{ext}"))
                 cmd = build_cut_cmd(
                     self.input_path, output_path,
                     _fmt_sec(s_sec), _fmt_sec(s_sec + d_sec),
@@ -200,11 +220,14 @@ class CutTask(QRunnable):
                 code, stderr = run_ffmpeg(cmd, seg_ms, _prog, self._stop)
                 done_ms += seg_ms
                 if self._stop.is_set():
+                    # 取消：只清当前半成品段，已成功的段保留
+                    _cleanup_partial(output_path, (self.input_path,))
                     self.status = CANCELLED
                     self.message = "已取消"
                     self._signals.finished.emit(self)
                     return
                 if code != 0:
+                    _cleanup_partial(output_path, (self.input_path,))
                     self.status = FAILED
                     self.message = _tail(stderr) or f"第{i}段 ffmpeg 退出码 {code}"
                     self._signals.finished.emit(self)
@@ -248,7 +271,7 @@ class ConvertTask(QRunnable):
         self.message = ""
         self.output_path = ""
         self.progress_pct = 0
-        self._stop = __import__("threading").Event()
+        self._stop = threading.Event()
         self._signals = ConvertTaskSignals()
 
     @property
@@ -267,10 +290,10 @@ class ConvertTask(QRunnable):
             out_dir.mkdir(parents=True, exist_ok=True)
 
             if p.get("audio_only"):
-                self.output_path = str(out_dir / f"{src.stem}.m4a")
+                self.output_path = str(_unoccupied(out_dir / f"{src.stem}.m4a"))
                 cmd = build_audio_extract_cmd(self.input_path, self.output_path)
             else:
-                self.output_path = str(out_dir / f"{src.stem}.{p.get('fmt', 'mp4')}")
+                self.output_path = str(_unoccupied(out_dir / f"{src.stem}.{p.get('fmt', 'mp4')}"))
                 cmd = build_convert_cmd(
                     self.input_path, self.output_path,
                     fmt=p.get("fmt", "mp4"),
@@ -288,12 +311,14 @@ class ConvertTask(QRunnable):
                 stop_event=self._stop,
             )
             if self._stop.is_set():
+                _cleanup_partial(self.output_path, (self.input_path,))
                 self.status = CANCELLED
                 self.message = "已取消"
             elif code == 0 and Path(self.output_path).exists():
                 self.progress_pct = 100
                 self.status = SUCCESS
             else:
+                _cleanup_partial(self.output_path, (self.input_path,))
                 self.status = FAILED
                 self.message = _tail(stderr) or f"转换 ffmpeg 退出码 {code}"
             self._signals.finished.emit(self)
@@ -330,7 +355,7 @@ class ConcatTask(QRunnable):
         self.message = ""
         self.output_path = ""
         self.progress_pct = 0
-        self._stop = __import__("threading").Event()
+        self._stop = threading.Event()
         self._signals = ConcatTaskSignals()
 
     @property
@@ -360,7 +385,7 @@ class ConcatTask(QRunnable):
             prefix = _re.sub(r"[-_ ]*(?:Part|CPart)?\d{3,}$", "", stem)
             ext = src.suffix or ".mp4"
             suffix = p.get("suffix", "_concat")
-            self.output_path = str(out_dir / f"{prefix}{suffix}{ext}")
+            self.output_path = str(_unoccupied(out_dir / f"{prefix}{suffix}{ext}"))
 
             list_path = str(out_dir / f".{stem}_concat.txt")
             write_concat_list(list_path, self.inputs)
@@ -380,12 +405,14 @@ class ConcatTask(QRunnable):
             )
 
             if self._stop.is_set():
+                _cleanup_partial(self.output_path, tuple(self.inputs))
                 self.status = CANCELLED
                 self.message = "已取消"
             elif code == 0 and Path(self.output_path).exists():
                 self.progress_pct = 100
                 self.status = SUCCESS
             else:
+                _cleanup_partial(self.output_path, tuple(self.inputs))
                 self.status = FAILED
                 self.message = _tail(stderr) or f"拼接 ffmpeg 退出码 {code}"
             self._signals.finished.emit(self)

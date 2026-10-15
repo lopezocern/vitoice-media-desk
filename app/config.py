@@ -54,7 +54,6 @@ DEFAULTS: dict[str, Any] = {
         "quality": "balance",          # high / balance / small
         "resolution": "keep",          # keep / 1920x1080 / 1280x720 / 854x480 / 640x360 / custom
         "custom_res": "",              # 自定义 WxH
-        "gpu": False,                  # 是否用 hevc_nvenc（mp4/mkv）
         "audio": "keep",               # keep=保留重编码 / none=去掉音频
         "prefer_soft": True,           # 预留：软件编码优先
         "audio_only": False,           # 仅提取音频
@@ -173,6 +172,8 @@ class AppConfig:
             p = Path(self._data["output_dir_custom"])
             if p.is_absolute():
                 return p
+            # 相对路径同样生效（相对启动目录解析），不再被静默忽略
+            return p.resolve()
         return source_dir / "out"
 
 

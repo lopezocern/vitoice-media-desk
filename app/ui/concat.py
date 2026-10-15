@@ -343,7 +343,7 @@ class ConcatPage(QWidget):
         self._refresh_summary()
 
     def _clear(self) -> None:
-        if self._task is not None and self._task.status is RUNNING:
+        if self._task is not None and self._task.status == RUNNING:
             QMessageBox.information(self, "提示", "拼接进行中，请先停止。")
             return
         self._inputs.clear()
@@ -360,7 +360,7 @@ class ConcatPage(QWidget):
 
     # ---- 运行 ----
     def _start(self) -> None:
-        if self._task is not None and self._task.status is RUNNING:
+        if self._task is not None and self._task.status == RUNNING:
             QMessageBox.information(self, "提示", "已有拼接任务在运行。")
             return
         if len(self._inputs) < 2:
@@ -394,18 +394,18 @@ class ConcatPage(QWidget):
         self._pool.add(task)
 
     def _stop(self) -> None:
-        if self._task is not None and self._task.status is RUNNING:
+        if self._task is not None and self._task.status == RUNNING:
             self._task.request_stop()
 
     def _on_progress(self, pct: int) -> None:
         self.bar.setValue(pct)
 
     def _on_finished(self, task: ConcatTask) -> None:
-        if task.status is SUCCESS:
+        if task.status == SUCCESS:
             self.bar.setValue(100)
             self.status_lbl.setText(f"完成：{Path(task.output_path).name}")
             self.status_lbl.setStyleSheet(f"color:{_COLOR_OK};font-weight:600;")
-        elif task.status is CANCELLED:
+        elif task.status == CANCELLED:
             self.status_lbl.setText("已取消")
             self.status_lbl.setStyleSheet(f"color:{_COLOR_WAIT};font-weight:600;")
         else:
@@ -416,5 +416,5 @@ class ConcatPage(QWidget):
 
     def _set_state(self, status: str, text: str) -> None:
         self.status_lbl.setText(text)
-        if status is RUNNING:
+        if status == RUNNING:
             self.status_lbl.setStyleSheet(f"color:{_COLOR_RUN};font-weight:600;")
