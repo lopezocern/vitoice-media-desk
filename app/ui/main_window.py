@@ -11,7 +11,7 @@ import sys
 from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QPushButton, QSizeGrip, QSpinBox, QStackedWidget,
     QVBoxLayout, QWidget,
 )
@@ -38,7 +38,7 @@ def _logo_path() -> str:
     return ""
 
 
-from .widgets import HelpLabel  # noqa: E402
+from .widgets import HelpLabel, OutputDirRow  # noqa: E402
 
 NAV = [
     ("总览", "overview"),
@@ -281,23 +281,14 @@ class SettingsPage(QWidget):
 
         # 输出目录
         lay, card = self._make_card("输出目录默认", "压缩默认输出位置；模块内可临时覆盖。")
-        row = QHBoxLayout()
-        self.od_mode = QComboBox()
-        self.od_mode.addItem("同源目录 /out", "same")
-        self.od_mode.addItem("指定目录", "custom")
-        self.od_mode.setCurrentIndex(0 if cfg.get("output_dir_mode") == "same" else 1)
-        self.od_mode.currentIndexChanged.connect(self._on_od_mode)
-        row.addWidget(self.od_mode)
-        self.od_dir = QLineEdit(cfg.get("output_dir_custom"))
-        self.od_dir.setPlaceholderText("选择输出目录…")
-        self.od_dir.setReadOnly(True)
-        pick = QPushButton("浏览…")
-        pick.clicked.connect(self._pick_dir)
-        row.addWidget(self.od_dir, 1)
-        row.addWidget(pick)
-        lay.addLayout(row)
+        self.od = OutputDirRow()
+        self.od.set_mode(cfg.get("output_dir_mode") or "same")
+        self.od.mode_changed.connect(
+            lambda mode: AppConfig.instance().set("output_dir_mode", mode))
+        self.od.custom_changed.connect(
+            lambda d: AppConfig.instance().set("output_dir_custom", d))
+        lay.addWidget(self.od)
         outer.addWidget(card)
-        self._on_od_mode()
 
         # 并发
         lay, card = self._make_card("默认同时压缩（路）", "0 表示自动（min 4, CPU核）。")
@@ -334,10 +325,9 @@ class SettingsPage(QWidget):
             self.gpu_status.setStyleSheet("color:#c98a1b;font-size:12.5px;")
 
     def _on_gpu_toggled(self, v: bool) -> None:
-        # 落库后即时广播：EnvProbe.encoder/label 动态读取 gpu_enabled，
-        # 顶栏状态/总览/压缩页编码器胶囊同步刷新，无需重新跑子进程探测。
-        AppConfig.instance().set("gpu_enabled", bool(v))
-        state.state.env_changed.emit()
+        # 单源 helper：落库 + env_changed 广播。EnvProbe.encoder/label 动态读
+        # gpu_enabled，顶栏状态/总览/压缩页编码器胶囊同步刷新，无需重跑探测。
+        state.set_gpu_enabled(v)
 
     def _pick_ffmpeg(self) -> None:
         import os
@@ -351,17 +341,6 @@ class SettingsPage(QWidget):
         AppConfig.instance().set("ffmpeg_path", self.ff_input.text().strip())
         state.start_env_probe()
         QMessageBox.information(self, "已提交", "已重新检测环境，稍后顶部状态会更新。")
-
-    def _pick_dir(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "选择输出目录", self.od_dir.text() or str(Path.home()))
-        if d:
-            self.od_dir.setText(d)
-            AppConfig.instance().set("output_dir_custom", d)
-
-    def _on_od_mode(self) -> None:
-        custom = self.od_mode.currentData() == "custom"
-        self.od_dir.setEnabled(custom)
-        AppConfig.instance().set("output_dir_mode", self.od_mode.currentData())
 
     def _on_conc(self, v: int) -> None:
         AppConfig.instance().set_compress("concurrency", v)

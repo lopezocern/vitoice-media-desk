@@ -1,15 +1,22 @@
-"""共享 UI 组件：帮助按钮、分段选择器、任务行（文件名 + 进度条 + 状态）。
+"""共享 UI 组件：帮助按钮、分段选择器、任务行（文件名 + 进度条 + 状态）、输出目录行。
 
 TaskRow 用于压缩页的每个文件：原始大小 -> 进度 -> 最终压缩率/状态。
+OutputDirRow 为压缩/切割/拼接/转换/设置五页共用的输出目录行。
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
-    QButtonGroup, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
-    QToolButton, QToolTip, QVBoxLayout, QWidget,
+    QButtonGroup, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
+    QLineEdit, QProgressBar, QPushButton, QToolButton, QToolTip, QVBoxLayout,
+    QWidget,
 )
+
+from ..config import AppConfig
+
 # 状态配色
 _COLOR_RUN = "#4f5bd5"
 _COLOR_OK = "#2f9e54"
@@ -188,6 +195,62 @@ class Segmented(QWidget):
             if not self._btns[idx].isChecked():
                 self._btns[idx].setChecked(True)
                 self.currentChanged.emit(data)
+
+
+class OutputDirRow(QWidget):
+    """输出目录行（五页共用）：同源/custom 下拉 + 只读目录框 + 浏览按钮。
+
+    功能页在 _start 里用 mode_data()/custom_text() 取值批量落库；
+    设置页等需要即时落库的场景连接 mode_changed / custom_changed。
+    """
+
+    mode_changed = Signal(str)      # "same" / "custom"
+    custom_changed = Signal(str)    # 浏览选定的新目录
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        self.mode = QComboBox()
+        self.mode.addItem("同源目录 /out", "same")
+        self.mode.addItem("指定目录", "custom")
+        self.mode.currentIndexChanged.connect(self._on_mode)
+        lay.addWidget(self.mode)
+        self.dir_edit = QLineEdit(AppConfig.instance().get("output_dir_custom"))
+        self.dir_edit.setPlaceholderText("选择输出目录…")
+        self.dir_edit.setReadOnly(True)
+        self.pick_btn = QPushButton("浏览…")
+        self.pick_btn.setObjectName("Ghost")
+        self.pick_btn.clicked.connect(self._pick)
+        lay.addWidget(self.dir_edit, 1)
+        lay.addWidget(self.pick_btn)
+        self._on_mode()
+
+    def _on_mode(self) -> None:
+        custom = self.mode.currentData() == "custom"
+        self.dir_edit.setEnabled(custom)
+        self.pick_btn.setEnabled(custom)
+        self.mode_changed.emit(self.mode.currentData())
+
+    def _pick(self) -> None:
+        d = QFileDialog.getExistingDirectory(
+            self, "选择输出目录", self.dir_edit.text() or str(Path.home()))
+        if d:
+            self.dir_edit.setText(d)
+            self.custom_changed.emit(d)
+
+    # ---- 取值接口 ----
+    def mode_data(self) -> str:
+        return self.mode.currentData()
+
+    def custom_text(self) -> str:
+        return self.dir_edit.text()
+
+    def set_mode(self, data: str) -> None:
+        idx = self.mode.findData(data)
+        if idx >= 0:
+            self.mode.setCurrentIndex(idx)
 
 
 class TaskRow(QWidget):

@@ -119,6 +119,18 @@ class AppConfig:
         self._data[key] = value
         self.save()
 
+    def update(self, values: dict[str, Any]) -> None:
+        """批量写顶层键，一次落盘（替代连续多次 set 的反复全量写盘）。"""
+        self._data.update(values)
+        self.save()
+
+    def update_section(self, section: str, values: dict[str, Any]) -> None:
+        """批量写子配置（compress/cut/concat/convert），一次落盘。"""
+        if not isinstance(self._data.get(section), dict):
+            raise KeyError(f"未知子配置节：{section}")
+        self._data[section].update(values)
+        self.save()
+
     def get_compress(self, key: str) -> Any:
         return self._data["compress"].get(key)
 

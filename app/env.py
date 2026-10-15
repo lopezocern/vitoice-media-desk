@@ -176,8 +176,20 @@ def _run_ok(argv: Sequence[str]) -> bool:
         return False
 
 
+# 时长探测缓存：{规范化路径 + mtime → 毫秒}。文件被改写（mtime 变）自动失效。
+_duration_cache: dict[tuple[str, int], int] = {}
+_DURATION_CACHE_MAX = 4096
+
+
 def probe_duration_ms(path: Path) -> int:
-    """读取媒体时长（毫秒）。失败返回 0。"""
+    """读取媒体时长（毫秒）。失败返回 0。按 (路径, mtime) 缓存。"""
+    try:
+        key = (str(path).lower(), int(path.stat().st_mtime))
+    except OSError:
+        key = (str(path).lower(), 0)
+    hit = _duration_cache.get(key)
+    if hit is not None:
+        return hit
     try:
         out = subprocess.run(
             [
@@ -189,6 +201,10 @@ def probe_duration_ms(path: Path) -> int:
             ],
             capture_output=True, text=True, timeout=60,
         ).stdout.strip()
-        return int(float(out) * 1000)
+        ms = int(float(out) * 1000)
     except Exception:
         return 0
+    if len(_duration_cache) >= _DURATION_CACHE_MAX:
+        _duration_cache.clear()
+    _duration_cache[key] = ms
+    return ms

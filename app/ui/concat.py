@@ -20,8 +20,8 @@ from ..config import AppConfig
 from ..task import CANCELLED, RUNNING, SUCCESS, ConcatTask, TaskPool
 from .compression import VIDEO_EXTS, human_size
 from .widgets import (
-    DropBox, HelpLabel, Segmented, _COLOR_RUN, _COLOR_OK, _COLOR_ERR,
-    _COLOR_WAIT, form_label, page_head, section_title,
+    DropBox, HelpLabel, OutputDirRow, Segmented, _COLOR_RUN, _COLOR_OK,
+    _COLOR_ERR, _COLOR_WAIT, form_label, page_head, section_title,
 )
 
 _PRESET_BY_SPEED = {"balanced": "medium", "fast": "fast", "ultrafast": "ultrafast"}
@@ -184,23 +184,11 @@ class ConcatPage(QWidget):
 
         f_od = QHBoxLayout()
         f_od.setSpacing(8)
-        self.od_mode = QComboBox()
-        self.od_mode.addItem("同源目录 /out", "same")
-        self.od_mode.addItem("指定目录", "custom")
-        self.od_mode.currentIndexChanged.connect(self._on_od_changed)
-        f_od.addWidget(self.od_mode)
-        self.od_custom = QLineEdit(AppConfig.instance().get("output_dir_custom"))
-        self.od_custom.setPlaceholderText("选择输出目录…")
-        self.od_custom.setReadOnly(True)
-        self.od_pick = QPushButton("浏览…")
-        self.od_pick.setObjectName("Ghost")
-        self.od_pick.clicked.connect(self._pick_outdir)
-        f_od.addWidget(self.od_custom, 1)
-        f_od.addWidget(self.od_pick)
+        self.od = OutputDirRow()
+        f_od.addWidget(self.od)
         form.addRow(form_label("输出目录"), f_od)
         blay.addWidget(card)
         self._on_mode_changed()  # 初始同步 speed/crf 可用态（默认 copy 时禁用）
-        self._on_od_changed()    # 初始同步输出目录行可用态
 
         self.scroll.setWidget(body)
         self.scroll.viewport().installEventFilter(self)
@@ -268,17 +256,6 @@ class ConcatPage(QWidget):
 
     def _on_speed_changed(self, *_args) -> None:
         self.crf.setValue(_CRF_BY_SPEED.get(self.speed.currentData(), 20))
-
-    def _on_od_changed(self) -> None:
-        custom = self.od_mode.currentData() == "custom"
-        self.od_custom.setEnabled(custom)
-        self.od_pick.setEnabled(custom)
-
-    def _pick_outdir(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "选择输出目录",
-                                             self.od_custom.text() or str(Path.home()))
-        if d:
-            self.od_custom.setText(d)
 
     def _pick_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
@@ -377,13 +354,16 @@ class ConcatPage(QWidget):
             "preset": _PRESET_BY_SPEED[self.speed.currentData()],
             "suffix": self.suffix.text().strip() or "_concat",
         }
-        cfg.set_concat("mode", mode)
-        cfg.set_concat("crf", self.crf.value())
-        cfg.set_concat("preset", params["preset"])
-        cfg.set_concat("suffix", params["suffix"])
-        cfg.set("output_dir_mode", self.od_mode.currentData())
-        if self.od_mode.currentData() == "custom":
-            cfg.set("output_dir_custom", self.od_custom.text())
+        cfg.update_section("concat", {   # 批量一次落盘
+            "mode": mode,
+            "crf": self.crf.value(),
+            "preset": params["preset"],
+            "suffix": params["suffix"],
+        })
+        top_vals = {"output_dir_mode": self.od.mode_data()}
+        if self.od.mode_data() == "custom":
+            top_vals["output_dir_custom"] = self.od.custom_text()
+        cfg.update(top_vals)
 
         task = ConcatTask(list(self._inputs), dict(params))
         self._task = task

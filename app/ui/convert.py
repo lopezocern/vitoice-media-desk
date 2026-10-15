@@ -19,8 +19,8 @@ from ..config import AppConfig
 from ..task import CANCELLED, RUNNING, SUCCESS, ConvertTask, TaskPool
 from .compression import VIDEO_EXTS, human_size
 from .widgets import (
-    DropBox, HelpLabel, Segmented, TaskRow, form_label, page_head,
-    section_title,
+    DropBox, HelpLabel, OutputDirRow, Segmented, TaskRow, form_label,
+    page_head, section_title,
 )
 
 _RES_LABELS = [("保持原尺寸", "keep"), ("1920x1080", "1920x1080"),
@@ -174,22 +174,10 @@ class ConvertPage(QWidget):
 
         f_od = QHBoxLayout()
         f_od.setSpacing(8)
-        self.od_mode = QComboBox()
-        self.od_mode.addItem("同源目录 /out", "same")
-        self.od_mode.addItem("指定目录", "custom")
-        self.od_mode.currentIndexChanged.connect(self._on_od_changed)
-        f_od.addWidget(self.od_mode)
-        self.od_custom = QLineEdit(AppConfig.instance().get("output_dir_custom"))
-        self.od_custom.setPlaceholderText("选择输出目录…")
-        self.od_custom.setReadOnly(True)
-        self.od_pick = QPushButton("浏览…")
-        self.od_pick.setObjectName("Ghost")
-        self.od_pick.clicked.connect(self._pick_outdir)
-        f_od.addWidget(self.od_custom, 1)
-        f_od.addWidget(self.od_pick)
+        self.od = OutputDirRow()
+        f_od.addWidget(self.od)
         form.addRow(form_label("输出目录"), f_od)
         blay.addWidget(card)
-        self._on_od_changed()  # 初始同步输出目录行可用态
 
         self.scroll.setWidget(body)
         self.scroll.viewport().installEventFilter(self)
@@ -244,13 +232,12 @@ class ConvertPage(QWidget):
         self._update_enc()
 
     def _on_gpu_toggled(self, checked: bool) -> None:
-        # 与压缩页/设置页同一机制：落库 gpu_enabled + env_changed 广播，
+        # 与压缩页/设置页同一机制：单源 helper 落库 + env_changed 广播，
         # 三页勾选态互相同步（本页 _sync_gpu_enabled 随广播回读全局值）。
         if checked and self._env is not None and not self._env.gpu_encoders:
             QMessageBox.information(
                 self, "提示", "当前环境未检测到可用的 NVIDIA 硬件编码，将回退到软件编码。")
-        AppConfig.instance().set("gpu_enabled", bool(checked))
-        state.state.env_changed.emit()
+        state.set_gpu_enabled(checked)
         self._update_enc()
 
     def _update_enc(self) -> None:
@@ -278,17 +265,6 @@ class ConvertPage(QWidget):
 
     def _on_res_changed(self) -> None:
         self.custom_res.setEnabled(self.res.currentData() == "custom")
-
-    def _on_od_changed(self) -> None:
-        custom = self.od_mode.currentData() == "custom"
-        self.od_custom.setEnabled(custom)
-        self.od_pick.setEnabled(custom)
-
-    def _pick_outdir(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "选择输出目录",
-                                             self.od_custom.text() or str(Path.home()))
-        if d:
-            self.od_custom.setText(d)
 
     def _pick_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
@@ -368,16 +344,20 @@ class ConvertPage(QWidget):
             "audio": self.audio.currentData(),
             "preset": "medium",
         }
-        cfg.set_convert("fmt", fmt)
-        cfg.set_convert("quality", quality)
-        cfg.set_convert("audio", params["audio"])
-        cfg.set_convert("audio_only", audio_only)
-        cfg.set_convert("resolution", self.res.currentData())
+        convert_vals = {
+            "fmt": fmt,
+            "quality": quality,
+            "audio": params["audio"],
+            "audio_only": audio_only,
+            "resolution": self.res.currentData(),
+        }
         if self.res.currentData() == "custom":
-            cfg.set_convert("custom_res", self.custom_res.text().strip())
-        cfg.set("output_dir_mode", self.od_mode.currentData())
-        if self.od_mode.currentData() == "custom":
-            cfg.set("output_dir_custom", self.od_custom.text())
+            convert_vals["custom_res"] = self.custom_res.text().strip()
+        cfg.update_section("convert", convert_vals)   # 批量一次落盘
+        top_vals = {"output_dir_mode": self.od.mode_data()}
+        if self.od.mode_data() == "custom":
+            top_vals["output_dir_custom"] = self.od.custom_text()
+        cfg.update(top_vals)
 
         for k in pending:
             task = ConvertTask(k, dict(params))

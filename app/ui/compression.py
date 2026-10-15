@@ -17,7 +17,10 @@ from PySide6.QtWidgets import (
 from .. import env as appenv, state
 from ..config import AppConfig
 from ..task import CANCELLED, RUNNING, SUCCESS, CompressionTask, TaskPool
-from .widgets import DropBox, HelpLabel, Segmented, TaskRow, form_label, page_head, section_title
+from .widgets import (
+    DropBox, HelpLabel, OutputDirRow, Segmented, TaskRow, form_label,
+    page_head, section_title,
+)
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".m4v", ".flv"}
 _SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"]
@@ -360,18 +363,8 @@ class CompressionPage(QWidget):
 
         f_od = QHBoxLayout()
         f_od.setSpacing(8)
-        self.od_mode = QComboBox()
-        self.od_mode.addItem("同源目录 /out", "same")
-        self.od_mode.addItem("指定目录", "custom")
-        self.od_mode.currentIndexChanged.connect(self._on_od_changed)
-        f_od.addWidget(self.od_mode)
-        self.od_custom = QLineEdit(AppConfig.instance().get("output_dir_custom"))
-        self.od_custom.setPlaceholderText("选择输出目录…")
-        self.od_custom.setReadOnly(True)
-        self.od_pick = QPushButton("浏览…")
-        self.od_pick.clicked.connect(self._pick_outdir)
-        f_od.addWidget(self.od_custom, 1)
-        f_od.addWidget(self.od_pick)
+        self.od = OutputDirRow()
+        f_od.addWidget(self.od)
         form.addRow(form_label("输出目录"), f_od)
 
         self.adv = QPushButton("展开高级参数（帧率 / 并发 / 命名）")
@@ -419,7 +412,6 @@ class CompressionPage(QWidget):
         self.suffix_edit = QLineEdit(AppConfig.instance().get_compress("suffix"))
         al.addRow(form_label("输出命名后缀"), self.suffix_edit)
         blay.addWidget(self.adv_card)
-        self._on_od_changed()
 
         self.scroll.setWidget(body)
         self.scroll.viewport().installEventFilter(self)
@@ -519,9 +511,8 @@ class CompressionPage(QWidget):
             self.gpu_sel.setCurrentIndex(0)
 
     def _on_gpu_toggled(self, on: bool) -> None:
-        # 与设置页同一机制：落库 + env_changed 广播，各页即时联动
-        AppConfig.instance().set("gpu_enabled", bool(on))
-        state.state.env_changed.emit()
+        # 与设置页/转换页同一机制：落库 + env_changed 广播（单源 helper），各页即时联动
+        state.set_gpu_enabled(on)
         self._sync_gpu_row()
         self._refresh_enc_pill()
 
@@ -715,15 +706,6 @@ class CompressionPage(QWidget):
     def _on_fps_changed(self) -> None:
         self.fps_v.setVisible(self.fps.currentData() == "custom")
 
-    def _on_od_changed(self) -> None:
-        custom = self.od_mode.currentData() == "custom"
-        self.od_custom.setEnabled(custom); self.od_pick.setEnabled(custom)
-
-    def _pick_outdir(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "选择输出目录", self.od_custom.text() or str(Path.home()))
-        if d:
-            self.od_custom.setText(d)
-
     def _pick_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
             self, "选择视频文件", "",
@@ -798,20 +780,24 @@ class CompressionPage(QWidget):
             "fps_value": self.fps_v.value(),
             "suffix": self.suffix_edit.text().strip() or "_compressed",
         }
-        cfg.set_compress("speed_mode", self.speed.currentData())
-        cfg.set_compress("crf", self.crf_slider.value())
-        cfg.set_compress("rate_mode", self._rate_mode)
-        cfg.set_compress("bitrate", params["bitrate"])
-        cfg.set_compress("resolution", self.res.currentData())
+        compress_vals = {
+            "speed_mode": self.speed.currentData(),
+            "crf": self.crf_slider.value(),
+            "rate_mode": self._rate_mode,
+            "bitrate": params["bitrate"],
+            "resolution": self.res.currentData(),
+            "fps": self.fps.currentData(),
+            "concurrency": self.conc.value(),
+            "suffix": params["suffix"],
+        }
         if custom_res:
-            cfg.set_compress("resolution_w", self.res_w.value())
-            cfg.set_compress("resolution_h", self.res_h.value())
-        cfg.set_compress("fps", self.fps.currentData())
-        cfg.set_compress("concurrency", self.conc.value())
-        cfg.set_compress("suffix", params["suffix"])
-        cfg.set("output_dir_mode", self.od_mode.currentData())
-        if self.od_mode.currentData() == "custom":
-            cfg.set("output_dir_custom", self.od_custom.text())
+            compress_vals["resolution_w"] = self.res_w.value()
+            compress_vals["resolution_h"] = self.res_h.value()
+        cfg.update_section("compress", compress_vals)   # 批量一次落盘
+        top_vals = {"output_dir_mode": self.od.mode_data()}
+        if self.od.mode_data() == "custom":
+            top_vals["output_dir_custom"] = self.od.custom_text()
+        cfg.update(top_vals)
 
         for k in pending:
             task = CompressionTask(k, dict(params))

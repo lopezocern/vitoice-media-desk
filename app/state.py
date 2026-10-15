@@ -18,6 +18,14 @@ class _EnvState(QObject):
 state = _EnvState()
 
 
+def set_gpu_enabled(on: bool) -> None:
+    """全局 GPU 硬编开关：落库 + env_changed 广播（压缩/转换/设置三页共用单源）。"""
+    from .config import AppConfig
+
+    AppConfig.instance().set("gpu_enabled", bool(on))
+    state.env_changed.emit()
+
+
 def start_env_probe() -> None:
     """后台线程执行环境探测，完成后填充 state.env 并广播 env_changed。"""
     import threading
