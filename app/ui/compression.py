@@ -118,6 +118,7 @@ class CompressionPage(QWidget):
         self._durations: dict[str, float] = {}  # 文件路径 -> 时长（秒）
         self._probing = False
 
+        self.setAcceptDrops(True)   # 页面级拖放（此前只在虚线框内生效，页面其余区域接不住）
         self._build_ui()
         self._restore_config()   # 档位/CRF/码率/模式/分辨率 从配置恢复
         self._refresh_preset_info()  # env 未就绪时也先按默认档位展示说明

@@ -8,12 +8,14 @@ from pathlib import Path
 import os
 import sys
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import (
+    QEasingCurve, QEvent, QPropertyAnimation, QRect, QSize, Qt, Signal,
+)
+from PySide6.QtGui import QGuiApplication, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QApplication, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QPushButton, QSizeGrip, QSpinBox, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
 from .. import state
@@ -70,6 +72,7 @@ class Sidebar(QWidget):
         lay.setSpacing(1)
         self._buttons: list[QPushButton] = []
         self._icons: dict[int, str] = {}
+        self._current = 0
 
         # 品牌标（logo 已在标题栏最左；侧边栏仅保留文字，避免重复标识）
         brand = QWidget()
@@ -139,26 +142,36 @@ class Sidebar(QWidget):
         self.layout().addWidget(grp)
 
     def select(self, index: int) -> None:
+        self._current = index
         for i, b in enumerate(self._buttons):
             b.setChecked(i == index)
             b.setIcon(nav_icon(self._icons[i], brand=(i == index)))
         self.currentChanged.emit(index)
 
+    def current_index(self) -> int:
+        return self._current
+
     def is_collapsed(self) -> bool:
         return self._collapsed
 
-    def set_collapsed(self, collapsed: bool) -> None:
+    def set_collapsed(self, collapsed: bool, animate: bool = True) -> None:
+        """折叠/展开侧栏；animate=False 用于启动恢复（避免闪一下动画）。"""
         self._collapsed = collapsed
         self._anim.stop()
         if collapsed:
             self.setMinimumWidth(0)
-            self._anim.setStartValue(self.width())
-            self._anim.setEndValue(0)
+            if animate:
+                self._anim.setStartValue(self.width())
+                self._anim.setEndValue(0)
         else:
             self.setMinimumWidth(self._FULL_W)
-            self._anim.setStartValue(max(self.width(), 0))
-            self._anim.setEndValue(self._FULL_W)
-        self._anim.start()
+            if animate:
+                self._anim.setStartValue(max(self.width(), 0))
+                self._anim.setEndValue(self._FULL_W)
+        if animate:
+            self._anim.start()
+        else:
+            self.setMaximumWidth(0 if collapsed else self._FULL_W)
 
 
 class _TitleBar(QWidget):
@@ -301,6 +314,16 @@ class SettingsPage(QWidget):
         row.addStretch(1)
         lay.addLayout(row)
         outer.addWidget(card)
+
+        # 任务通知
+        lay, card = self._make_card(
+            "任务通知", "整批任务结束时若窗口不在前台，弹托盘气泡并闪烁任务栏。")
+        self.notify = QCheckBox("任务全部结束时通知我")
+        self.notify.setChecked(bool(cfg.get_ui("notify_on_finish")))
+        self.notify.toggled.connect(
+            lambda v: AppConfig.instance().set_ui("notify_on_finish", bool(v)))
+        lay.addWidget(self.notify)
+        outer.addWidget(card)
         outer.addStretch(1)
 
     def _refresh_env_info(self) -> None:
@@ -364,7 +387,12 @@ class MainWindow(QMainWindow):
         self._resizing = Qt.Edge(0)          # 当前拖拽的缩放边
         self._resize_geo = None              # 拖拽起始窗口几何
         self._resize_pos = None              # 拖拽起始全局鼠标位置
+        self._prev_running = 0               # 上一轮「运行中」任务数（用于批次完成判定）
+        self._batch_base = (0, 0)            # 本批次开始时的（完成, 失败）累计值
+        self._tray = None                    # 托盘图标（首次通知时才创建）
         self._build()
+        self._restore_ui_state()
+        self._init_shortcuts()
 
     def _build(self) -> None:
         root = QWidget()
@@ -395,7 +423,7 @@ class MainWindow(QMainWindow):
         self.collapse_btn = QPushButton()
         self.collapse_btn.setObjectName("NavCollapse")
         self.collapse_btn.setIcon(window_icon("menu"))
-        self.collapse_btn.setIconSize(QSize(15, 15))
+        self.collapse_btn.setIconSize(QSize(16, 16))
         self.collapse_btn.setFixedSize(30, 26)
         self.collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.collapse_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -420,7 +448,7 @@ class MainWindow(QMainWindow):
             b.setText("")
             b.setFixedSize(38, 28)
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            b.setIconSize(QSize(15, 15))
+            b.setIconSize(QSize(16, 16))  # 与图标预渲染档位对齐，避免 18→15 缩放发虚
         self._win_min.setIcon(window_icon("min"))
         self._win_max.setIcon(window_icon("max"))
         self._win_close.setIcon(window_icon("close"))
@@ -530,6 +558,142 @@ class MainWindow(QMainWindow):
             if self.screen():
                 self.setGeometry(self.screen().availableGeometry())
 
+    # ---- 界面状态持久化 ----
+    @staticmethod
+    def _rect_visible(rect: QRect) -> bool:
+        """几何是否仍落在某块屏幕内。
+
+        防「换分辨率 / 拔掉外接屏」后窗口恢复到屏幕外，造成打不开的假死。
+        """
+        for screen in QGuiApplication.screens():
+            inter = screen.availableGeometry().intersected(rect)
+            if inter.width() >= 160 and inter.height() >= 60:
+                return True
+        return False
+
+    def _restore_ui_state(self) -> None:
+        """恢复上次退出时的窗口几何 / 最大化 / 侧栏折叠 / 停留页面。"""
+        cfg = AppConfig.instance()
+        raw = cfg.get_ui("window_geometry")
+        rect = None
+        if isinstance(raw, (list, tuple)) and len(raw) == 4:
+            try:
+                rect = QRect(*(int(v) for v in raw))
+            except (TypeError, ValueError):
+                rect = None
+        if (rect is not None
+                and rect.width() >= self.minimumWidth()
+                and rect.height() >= self.minimumHeight()
+                and self._rect_visible(rect)):
+            self.setGeometry(rect)
+            self._restore_geo = rect
+        if cfg.get_ui("sidebar_collapsed"):
+            self.sidebar.set_collapsed(True, animate=False)
+        idx = cfg.get_ui("last_page")
+        if isinstance(idx, int) and 0 <= idx < len(NAV):
+            self.sidebar.select(idx)          # 同时经 currentChanged 切到对应页面
+        if cfg.get_ui("window_maximized"):
+            self._maximized = False
+            self._toggle_max()
+
+    def _save_ui_state(self) -> None:
+        geo = self._restore_geo if (self._maximized and self._restore_geo) else self.geometry()
+        try:
+            AppConfig.instance().update_ui({
+                "window_geometry": [geo.x(), geo.y(), geo.width(), geo.height()],
+                "window_maximized": bool(self._maximized),
+                "sidebar_collapsed": self.sidebar.is_collapsed(),
+                "last_page": self.sidebar.current_index(),
+            })
+        except OSError:
+            pass
+
+    def closeEvent(self, event) -> None:
+        self._save_ui_state()
+        super().closeEvent(event)
+
+    # ---- 全局快捷键 ----
+    def _init_shortcuts(self) -> None:
+        """Ctrl+1~7 切页｜Ctrl+, 设置｜Ctrl+O 添加｜Ctrl+Enter 开始｜Esc 停止。"""
+        # 必须持有引用：QShortcut 的 Python 包装被回收后，其 activated 连接会失效
+        self._shortcuts: list[QShortcut] = []
+
+        def _bind(seq, slot) -> None:
+            sc = QShortcut(seq, self)
+            sc.activated.connect(slot)
+            self._shortcuts.append(sc)
+
+        for i in range(len(NAV)):
+            _bind(QKeySequence(f"Ctrl+{i + 1}"), lambda i=i: self.sidebar.select(i))
+        _bind(QKeySequence("Ctrl+,"), lambda: self.sidebar.select(len(NAV) - 1))
+        _bind(QKeySequence.StandardKey.Open, self._shortcut_add)
+        for seq in ("Ctrl+Return", "Ctrl+Enter"):
+            _bind(QKeySequence(seq), self._shortcut_start)
+        _bind(QKeySequence("Esc"), self._shortcut_stop)
+
+    def _shortcut_add(self) -> None:
+        page = self.stack.currentWidget()
+        for name in ("_pick_files", "_pick_dir"):
+            fn = getattr(page, name, None)
+            if callable(fn):
+                fn()
+                return
+
+    def _shortcut_start(self) -> None:
+        fn = getattr(self.stack.currentWidget(), "_start", None)
+        if callable(fn):
+            fn()
+
+    def _shortcut_stop(self) -> None:
+        page = self.stack.currentWidget()
+        for name in ("_stop_all", "_stop"):
+            fn = getattr(page, name, None)
+            if callable(fn):
+                fn()
+                return
+
+    # ---- 任务完成通知 ----
+    def _ensure_tray(self) -> QSystemTrayIcon | None:
+        if self._tray is not None:
+            return self._tray
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return None
+        lp = _logo_path()
+        icon = QIcon(lp) if lp else nav_icon("overview", brand=True)
+        tray = QSystemTrayIcon(icon, self)
+        tray.setToolTip("媒体工作台 MediaDesk")
+        tray.activated.connect(self._on_tray_activated)
+        tray.show()
+        self._tray = tray
+        return tray
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                      QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.show()
+            self.raise_()
+            self.activateWindow()
+
+    def _maybe_notify_batch(self, running: int, done: int, failed: int) -> None:
+        """整批任务从「有运行」转为「全结束」时提醒，窗口在前台则不打扰。"""
+        if self._prev_running == 0 and running > 0:
+            self._batch_base = (done, failed)      # 记录批次起点
+        prev, self._prev_running = self._prev_running, running
+        if prev <= 0 or running > 0:
+            return
+        if not AppConfig.instance().get_ui("notify_on_finish"):
+            return
+        d = max(0, done - self._batch_base[0])
+        f = max(0, failed - self._batch_base[1])
+        if d + f <= 0 or self.isActiveWindow():
+            return
+        msg = f"完成 {d} 个" + (f"，失败 {f} 个" if f else "")
+        tray = self._ensure_tray()
+        if tray is not None:
+            tray.showMessage("MediaDesk 任务结束", msg,
+                             QSystemTrayIcon.MessageIcon.Information, 4000)
+        QApplication.alert(self, 0)                # 任务栏闪烁，切回窗口即停
+
     # ---- 无边框窗口：边缘/角落拖拽缩放 ----
     def _resize_cursor(self, edges) -> Qt.CursorShape:
         e = int(edges)
@@ -629,6 +793,7 @@ class MainWindow(QMainWindow):
         self.bar_failed.setText(
             f'失败 <span style="color:#d1495b;font-weight:700">{f}</span>'
         )
+        self._maybe_notify_batch(r, d, f)
 
     def _stop_all(self) -> None:
         for name in ("视频压缩", "视频切割", "格式转换"):

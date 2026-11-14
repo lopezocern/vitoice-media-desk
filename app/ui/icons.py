@@ -2,24 +2,37 @@
 
 不依赖 QtSvg / 外部图标文件，绿色版打包零额外运行时插件。
 每个图标返回 QIcon，`brand=True` 时用品牌色（用于侧栏选中态）。
+
+高 DPI：不再只渲染一张 18px 位图再让 Qt 放大插值。改为按
+「应用内请求的逻辑尺寸（16/18）× 常见缩放比（1.0~3.0）」预渲染
+多档物理像素，QIcon 按当前屏 DPR 直接命中同像素量的图，
+100% / 125% / 150% / 200% / 250% / 300% 下都是原生清晰度。
 """
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
-_S = 18  # 画布尺寸（px）
+_S = 18                                   # 绘图坐标系基准画布（逻辑单位）
+_LOGICAL = (16, 18)                       # 应用内实际请求的图标尺寸
+_DPRS = (1.0, 1.25, 1.5, 2.0, 2.5, 3.0)   # 常见屏幕缩放比
+_PHYS = sorted({max(1, round(n * d)) for n in _LOGICAL for d in _DPRS})
+
 _BRAND = QColor("#4f5bd5")
 _NORMAL = QColor("#454f66")  # 与侧栏导航文字 #3a4256 更接近，视觉统一
 
 
-def _render(fn, color: str) -> QIcon:
-    pm = QPixmap(_S, _S)
+def _pixmap(fn, color: str, phys: int) -> QPixmap:
+    """按物理像素 phys 绘制，内部坐标系始终是 18×18。"""
+    pm = QPixmap(phys, phys)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    k = phys / _S
+    p.scale(k, k)
     pen = QPen(QColor(color), 1.7)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -27,7 +40,16 @@ def _render(fn, color: str) -> QIcon:
     p.setBrush(Qt.BrushStyle.NoBrush)
     fn(p)
     p.end()
-    return QIcon(pm)
+    return pm
+
+
+@lru_cache(maxsize=64)
+def _render(fn, color: str) -> QIcon:
+    """多档位 QIcon；缓存避免每次切页/重绘都重画全部图标。"""
+    icon = QIcon()
+    for phys in _PHYS:
+        icon.addPixmap(_pixmap(fn, color, phys))
+    return icon
 
 
 def nav_icon(kind: str, brand: bool = False) -> QIcon:

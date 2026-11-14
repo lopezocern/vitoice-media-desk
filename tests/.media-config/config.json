@@ -29,6 +29,13 @@
     "preset": "fast",
     "suffix": "_concat"
   },
+  "ui": {
+    "window_geometry": [],
+    "window_maximized": false,
+    "sidebar_collapsed": false,
+    "last_page": 0,
+    "notify_on_finish": true
+  },
   "convert": {
     "fmt": "mp4",
     "quality": "balance",

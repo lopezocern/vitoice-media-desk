@@ -158,9 +158,10 @@ class RenamePage(QWidget):
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(120)
         self._refresh_timer.timeout.connect(self._render)
+        self.setAcceptDrops(True)   # 支持把文件夹拖进页面直接扫描
         self._build_ui()
         self._build_config_ui()
-        self._apply_hint("选择目标目录并点击扫描，然后配置规则查看预览。")
+        self._apply_hint("选择目标目录或拖入文件夹，点击扫描后配置规则查看预览。")
 
     # ------------------------------------------------------------------
     # 界面骨架
@@ -491,6 +492,22 @@ class RenamePage(QWidget):
                                              self.src_input.text() or str(Path.home()))
         if d:
             self.src_input.setText(d)
+
+    # ---- 拖拽：拖入文件夹即填入并扫描 ----
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        paths = [u.toLocalFile() for u in event.mimeData().urls()]
+        event.acceptProposedAction()
+        for raw in paths:
+            p = Path(raw)
+            if p.is_dir():
+                self.src_input.setText(str(p))
+                self._scan()
+                return
+        self._apply_hint("请拖入一个文件夹（单个文件不支持）。")
 
     def _scan(self) -> None:
         raw = self.src_input.text().strip()

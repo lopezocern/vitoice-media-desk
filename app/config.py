@@ -49,6 +49,14 @@ DEFAULTS: dict[str, Any] = {
         "preset": "fast",
         "suffix": "_concat",           # 拼接输出命名后缀（实际 <前置名><后缀>）
     },
+    # 界面状态（窗口/导航等持久化项）
+    "ui": {
+        "window_geometry": [],         # [x, y, w, h]；空 = 用默认尺寸
+        "window_maximized": False,     # 上次退出时是否最大化
+        "sidebar_collapsed": False,    # 侧边栏折叠态
+        "last_page": 0,                # 上次停留的导航索引
+        "notify_on_finish": True,      # 批量任务结束是否弹通知
+    },
     "convert": {
         "fmt": "mp4",                  # 目标容器：mp4 / webm / mkv
         "quality": "balance",          # high / balance / small
@@ -95,6 +103,7 @@ class AppConfig:
         merged["cut"] = {**DEFAULTS["cut"], **raw.get("cut", {})}
         merged["concat"] = {**DEFAULTS["concat"], **raw.get("concat", {})}
         merged["convert"] = {**DEFAULTS["convert"], **raw.get("convert", {})}
+        merged["ui"] = {**DEFAULTS["ui"], **raw.get("ui", {})}
         self._data = merged
         # 旧版三档 speed_mode 迁移到四档（一次归一化，避免下游 KeyError）
         sm = self._data["compress"].get("speed_mode")
@@ -161,6 +170,18 @@ class AppConfig:
     def set_convert(self, key: str, value: Any) -> None:
         self._data["convert"][key] = value
         self.save()
+
+    # ---- 界面状态 ----
+    def get_ui(self, key: str) -> Any:
+        return self._data["ui"].get(key)
+
+    def set_ui(self, key: str, value: Any) -> None:
+        self._data["ui"][key] = value
+        self.save()
+
+    def update_ui(self, values: dict[str, Any]) -> None:
+        """批量写界面状态，一次落盘（退出时集中保存窗口几何等）。"""
+        self.update_section("ui", values)
 
     # ---- 便捷派生态度 ----
     def crf(self) -> int:
