@@ -25,3 +25,12 @@ tele_tools/.env
 # 运行期
 *.log
 .workbuddy/
+
+# 测试运行产物（离屏测试会把配置写到 tests/.media-config）
+tests/.media-config/
+
+# 编辑器 / 工具临时产物
+.trae/
+.trae-html-share-packages/
+.vscode/
+.idea/
