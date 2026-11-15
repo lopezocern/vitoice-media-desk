@@ -350,14 +350,17 @@ class CompressionPage(QWidget):
         f_res.addWidget(self.res)
         self.res_w = QSpinBox(); self.res_w.setRange(2, 7680); self.res_w.setValue(1920)
         self.res_h = QSpinBox(); self.res_h.setRange(2, 4320); self.res_h.setValue(1080)
-        # 非「自定义」时，宽高输入框与中间的 × 一起隐藏（原先只隐藏了输入框，
-        # 留下孤立的 × 与 ? 看起来像残缺控件）
-        self.res_x = form_label("×")
-        for w in (self.res_w, self.res_x, self.res_h):
-            w.setVisible(False)
-        f_res.addWidget(self.res_w)
-        f_res.addWidget(self.res_x)
-        f_res.addWidget(self.res_h)
+        # 宽高输入与中间的 × 收进同一个容器整体显隐：只控制一个可见性开关，
+        # 避免出现「输入框藏了但 × 还留着」这类半隐藏状态
+        self.res_custom = QWidget()
+        rc = QHBoxLayout(self.res_custom)
+        rc.setContentsMargins(0, 0, 0, 0)
+        rc.setSpacing(6)
+        rc.addWidget(self.res_w)
+        rc.addWidget(form_label("×"))
+        rc.addWidget(self.res_h)
+        self.res_custom.setVisible(False)
+        f_res.addWidget(self.res_custom)
         f_res.addWidget(HelpLabel("降档分辨率时，说明卡预估按像素比例同步下调。"))
         f_res.addStretch(1)
         form_res.addRow(form_label("分辨率"), f_res)
@@ -718,9 +721,8 @@ class CompressionPage(QWidget):
         self.custom_tag.setVisible(overridden)
 
     def _on_res_changed(self) -> None:
-        show = self.res.currentData() == "custom"
-        for w in (self.res_w, self.res_x, self.res_h):
-            w.setVisible(show)
+        # 整块容器显隐：非「自定义」时不留下孤立的 × 或空输入框
+        self.res_custom.setVisible(self.res.currentData() == "custom")
         self._refresh_preset_info()
 
     # ---------------- 时长探测（码率模式的预估需要总时长） ----------------
