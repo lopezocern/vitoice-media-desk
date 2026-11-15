@@ -13,21 +13,19 @@ from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame,
     QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton,
-    QScrollArea, QSpinBox, QToolButton, QVBoxLayout, QWidget,
+    QScrollArea, QSlider, QSpinBox, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .. import state
-from ..config import AppConfig
+from ..config import CRF_BY_SPEED, PRESET_BY_SPEED, AppConfig
 from ..task import CANCELLED, RUNNING, SUCCESS, CutTask, TaskPool
-from .compression import VIDEO_EXTS, human_size
+from .compression import VIDEO_EXTS, _crf_tag, human_size
 from .timefield import TimeField, fmt_secs, parse_ts
 from .widgets import (
     DropBox, HelpLabel, OutputDirRow, Segmented, _COLOR_OK, _COLOR_RUN,
     _COLOR_ERR, _COLOR_WAIT, form_label, page_head, section_title,
+    set_combo_items,
 )
-
-_PRESET_BY_SPEED = {"balanced": "medium", "fast": "fast", "ultrafast": "ultrafast"}
-_DEFAULTS_CRF = {"balanced": 18, "fast": 20, "ultrafast": 23}
 
 
 class CutRow(QWidget):
@@ -150,9 +148,12 @@ class CutDialog(QDialog):
 
         bar = QHBoxLayout()
         self.fmt_combo = QComboBox()
-        for label, val in [("格式：自动识别", "auto"), ("秒", "s"),
-                           ("MM:SS", "ms"), ("HH:MM:SS", "hms")]:
-            self.fmt_combo.addItem(label, val)
+        set_combo_items(self.fmt_combo, [
+            ("格式：自动识别", "auto", "推荐"),
+            ("秒", "s", "如 90"),
+            ("MM:SS", "ms", "如 01:30"),
+            ("HH:MM:SS", "hms", "如 00:01:30"),
+        ])
         self.fmt_combo.setCursor(Qt.CursorShape.PointingHandCursor)
         self.paste_btn = QPushButton("粘贴时间")
         self.paste_btn.setObjectName("Ghost")
@@ -389,7 +390,7 @@ class CutPage(QWidget):
         self.listarea = QScrollArea()
         self.listarea.setWidgetResizable(True)
         self.listarea.setObjectName("TaskList")
-        self.listarea.setMinimumHeight(240)
+        self.listarea.setMinimumHeight(176)
         self.listcontainer = QWidget()
         self.listlay = QVBoxLayout(self.listcontainer)
         self.listlay.setContentsMargins(0, 0, 0, 0)
@@ -408,52 +409,101 @@ class CutPage(QWidget):
 
         card = QFrame()
         card.setObjectName("SettingCard")
-        form = QFormLayout(card)
-        form.setContentsMargins(16, 14, 16, 14)
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(10)
+        cardv = QVBoxLayout(card)
+        cardv.setContentsMargins(16, 14, 16, 14)
+        cardv.setSpacing(12)
+        cols = QHBoxLayout()
+        cols.setContentsMargins(0, 0, 0, 0)
+        cols.setSpacing(22)
+
+        def _col_form() -> QFormLayout:
+            """两列参数区共用的紧凑表单：标签右对齐，左右两列可目视对齐。"""
+            f = QFormLayout()
+            f.setContentsMargins(0, 0, 0, 0)
+            f.setHorizontalSpacing(10)
+            f.setVerticalSpacing(10)
+            f.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            return f
+
+        left = QVBoxLayout()
+        left.setSpacing(10)
+        right = QVBoxLayout()
+        right.setSpacing(10)
+        form = _col_form()
+        rform = _col_form()
 
         f_mode = QHBoxLayout()
         f_mode.setSpacing(6)
         self.mode = QComboBox()
-        self.mode.addItem("快速流复制（速度快）", "copy")
-        self.mode.addItem("精确重编码（默认）", "reencode")
+        set_combo_items(self.mode, [
+            ("快速流复制", "copy", "秒切，可能有黑帧"),
+            ("精确重编码", "reencode", "逐帧精确"),
+        ])
         self.mode.setCurrentIndex(1)  # 与标签「默认」一致
         self.mode.currentIndexChanged.connect(self._on_mode_changed)
         f_mode.addWidget(self.mode)
+        f_mode.addWidget(HelpLabel("流复制不重新编码，速度最快但不保证首尾帧精确。"))
         f_mode.addStretch(1)
         form.addRow(form_label("切割方式"), f_mode)
 
-        f_speed = QHBoxLayout()
-        f_speed.setSpacing(6)
+        # 四档位：与压缩页同一体系（从慢到快），切档时 CRF 联动到该档默认值
         self.speed = Segmented([
-            ("超快", "ultrafast"),
-            ("平衡", "balanced"),
+            ("极致画质", "best"),
+            ("高画质", "high"),
+            ("均衡", "standard"),
             ("快速", "fast"),
         ])
-        self.speed.setCurrentData("fast")
         self.speed.currentChanged.connect(self._on_speed_changed)
+        f_speed = QHBoxLayout()
+        f_speed.setSpacing(6)
         f_speed.addWidget(self.speed)
-        f_speed.addWidget(HelpLabel("仅重编码时生效。"))
         f_speed.addStretch(1)
         form.addRow(form_label("重编码速度"), f_speed)
 
-        f_crf = QHBoxLayout()
-        f_crf.setSpacing(6)
-        self.crf = QSpinBox()
+        # CRF 滑杆（与压缩页控件形态一致；保留 self.crf 名称，取值接口不变）
+        self.crf_zone = QWidget()
+        cz = QHBoxLayout(self.crf_zone)
+        cz.setContentsMargins(0, 0, 0, 0)
+        cz.setSpacing(10)
+        self.crf = QSlider(Qt.Orientation.Horizontal)
+        self.crf.setObjectName("ParamSlider")
         self.crf.setRange(0, 51)
-        self.crf.setValue(int(AppConfig.instance().get_cut("crf") or 20))
-        f_crf.addWidget(self.crf)
-        f_crf.addWidget(HelpLabel("数值越低越清晰、文件越大。仅重编码时生效。"))
-        f_crf.addStretch(1)
-        form.addRow(form_label("CRF（画质）"), f_crf)
+        self.crf.setValue(20)
+        self.crf.valueChanged.connect(self._on_crf_changed)
+        cz.addWidget(self.crf, 1)
+        self.crf_val = QLabel("20")
+        self.crf_val.setObjectName("RangeVal")
+        cz.addWidget(self.crf_val)
+        rform.addRow(form_label("CRF 画质"), self.crf_zone)
 
-        f_od = QHBoxLayout()
-        f_od.setSpacing(8)
+        self.crf_tag = QLabel(_crf_tag(20))
+        self.crf_tag.setStyleSheet("color:#8b93ab;font-size:11px;")
+        tag_row = QHBoxLayout()
+        tag_row.setSpacing(6)
+        tag_row.addWidget(self.crf_tag)
+        tag_row.addWidget(HelpLabel("数值越低越清晰、文件越大；仅重编码时生效。"))
+        tag_row.addStretch(1)
+        right.addLayout(rform)
+        right.addLayout(tag_row)
+        right.addStretch(1)
+
+        left.addLayout(form)
+        left.addStretch(1)
+        cols.addLayout(left, 1)
+        cols.addLayout(right, 1)
+        cardv.addLayout(cols)
+
         self.od = OutputDirRow()
-        f_od.addWidget(self.od)
-        form.addRow(form_label("输出目录"), f_od)
+        od_row = QHBoxLayout()
+        od_row.setSpacing(10)
+        od_row.addWidget(form_label("输出目录"))
+        od_row.addWidget(self.od, 1)
+        cardv.addLayout(od_row)
         blay.addWidget(card)
+
+        # 先按档位联动，再用配置里的 CRF 覆盖，避免持久化的自定义值被默认值冲掉
+        self.speed.setCurrentData("high")
+        self.crf.setValue(int(AppConfig.instance().get_cut("crf") or 20))
         self._on_mode_changed()  # 初始同步 speed/crf 可用态（须在全部参数控件创建后）
 
         self.scroll.setWidget(body)
@@ -500,10 +550,15 @@ class CutPage(QWidget):
     def _on_mode_changed(self) -> None:
         reenc = self.mode.currentData() == "reencode"
         self.speed.setEnabled(reenc)
-        self.crf.setEnabled(reenc)
+        self.crf_zone.setEnabled(reenc)
 
     def _on_speed_changed(self, *_args) -> None:
-        self.crf.setValue(_DEFAULTS_CRF.get(self.speed.currentData(), 20))
+        # 档位=预设包：未手动调整前，CRF 跟随档位默认值
+        self.crf.setValue(CRF_BY_SPEED.get(self.speed.currentData(), 20))
+
+    def _on_crf_changed(self, v: int) -> None:
+        self.crf_val.setText(str(v))
+        self.crf_tag.setText(_crf_tag(v))
 
     def _pick_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
@@ -588,7 +643,7 @@ class CutPage(QWidget):
             "mode": mode,
             "encoder": enc,
             "crf": self.crf.value(),
-            "preset": _PRESET_BY_SPEED[self.speed.currentData()],
+            "preset": PRESET_BY_SPEED[self.speed.currentData()],
         }
         cfg.update_section("cut", {   # 批量一次落盘
             "mode": mode,

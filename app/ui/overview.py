@@ -32,6 +32,16 @@ class ModuleCard(QFrame):
         self._kind = kind
         self._pressed = False
         self.setObjectName("ModuleCard")
+        # QSS 的 background/border 需显式开启样式背景才会绘制（同 TaskRow）
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        # 内联兜底：全局 QSS 里的 #ModuleCard 规则在部分父级组合下不绘制白底，
+        # 这里直接给自身上样式，保证卡片边界一定可见。
+        self.setStyleSheet(
+            "QFrame#ModuleCard{background:#ffffff;border:1px solid #ccd5e8;border-radius:12px;}"
+            "QFrame#ModuleCard:hover{border-color:#4f5bd5;background:#fbfcff;}"
+            "QFrame#ModuleCard:pressed{background:#eef0fe;}"
+        )
+        self.setMinimumHeight(134)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(15, 13, 15, 13)

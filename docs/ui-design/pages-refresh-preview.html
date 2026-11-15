@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MediaDesk 页面优化预览稿 v1</title>
+<style>
+:root{
+  --brand:#4f5bd5; --brand-hover:#3f49c2; --brand-soft:#eef0fe; --brand-line:#dfe3f8;
+  --bg:#eef1f8; --card:#ffffff; --line:#e4e9f2; --line-strong:#d3dae8;
+  --t1:#1c2333; --t2:#3a4256; --t3:#64748b; --t4:#9aa3bd;
+  --ok:#2f9e54; --ok-soft:#e7f6ec; --warn:#b7791f; --warn-soft:#fdf3e3;
+  --radius:12px; --radius-sm:9px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:"Microsoft YaHei UI","Segoe UI",sans-serif;
+  background:#dfe4f0; color:var(--t1); padding:28px 20px 60px;
+  -webkit-font-smoothing:antialiased;
+}
+.page-head{max-width:1200px;margin:0 auto 22px;}
+.page-head h1{font-size:24px;font-weight:800;letter-spacing:.2px;}
+.page-head p{font-size:13px;color:var(--t3);margin-top:6px;line-height:1.6;}
+.legend{display:flex;gap:18px;margin-top:12px;flex-wrap:wrap;font-size:12px;color:var(--t3);}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:1px;}
+
+/* tabs */
+.tabs{max-width:1200px;margin:0 auto 18px;display:flex;gap:6px;flex-wrap:wrap;
+  background:#fff;padding:6px;border-radius:14px;border:1px solid var(--line);}
+.tabs button{
+  font-family:inherit;font-size:12.5px;font-weight:600;color:var(--t3);
+  background:transparent;border:none;border-radius:9px;padding:8px 14px;cursor:pointer;
+  transition:.15s;
+}
+.tabs button:hover{background:#f2f4fb;color:var(--t1);}
+.tabs button.on{background:var(--brand);color:#fff;}
+
+.stage{max-width:1200px;margin:0 auto;}
+.view{display:none;}
+.view.on{display:block;}
+
+/* 窗口模拟 */
+.win{
+  width:1200px;height:820px;background:var(--bg);border-radius:14px;overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 18px 50px -12px rgba(28,35,51,.28),0 0 0 1px rgba(28,35,51,.07);
+}
+.titlebar{height:44px;background:#fff;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;padding:0 10px 0 14px;gap:10px;flex:0 0 auto;}
+.logo{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,#5b6cf0,#3f49c2);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;flex:0 0 auto;}
+.iconbtn{width:30px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  color:#5a6480;font-size:14px;cursor:pointer;}
+.iconbtn:hover{background:var(--bg);}
+.apptitle{font-size:15px;font-weight:700;}
+.tagline{font-size:11px;font-weight:600;color:var(--t4);}
+.spacer{flex:1;}
+.caps{font-size:11.5px;font-weight:600;color:var(--brand);background:var(--brand-soft);
+  border-radius:999px;padding:4px 12px;}
+.wbtn{width:38px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  color:#3a4256;font-size:13px;cursor:pointer;}
+.wbtn:hover{background:var(--bg);}
+.wbtn.close:hover{background:#d1495b;color:#fff;}
+
+.body{flex:1;display:flex;min-height:0;}
+.sidebar{width:216px;flex:0 0 216px;background:#fff;border-right:1px solid var(--line);
+  display:flex;flex-direction:column;padding:4px 0 8px;}
+.brand{padding:10px 14px 8px;border-bottom:1px solid var(--bg);}
+.brand b{display:block;font-size:14px;font-weight:800;line-height:1.2;}
+.brand span{display:block;font-size:10.5px;font-weight:600;color:var(--t4);margin-top:1px;}
+.navgroup{font-size:10.5px;font-weight:700;color:var(--t4);letter-spacing:.06em;padding:14px 12px 5px 14px;}
+.navitem{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--t2);
+  margin:1px 8px;padding:8px 10px;border-radius:9px;cursor:pointer;}
+.navitem:hover{background:#f2f4fb;color:#1f2740;}
+.navitem.on{background:var(--brand-soft);color:var(--brand);font-weight:600;}
+.navico{width:16px;text-align:center;font-size:13px;opacity:.85;}
+.sidefoot{margin-top:auto;padding:4px 14px 10px;display:flex;align-items:center;gap:7px;}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:0 0 auto;}
+.sidefoot span{font-size:11.5px;color:var(--t4);}
+
+.content{flex:1;min-width:0;overflow:auto;padding:18px 20px 12px;display:flex;flex-direction:column;}
+.statusbar{height:38px;background:#fff;border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:18px;padding:0 16px;flex:0 0 auto;}
+.stat{font-size:11.5px;color:var(--t3);}
+.stat b{color:var(--t1);font-weight:700;}
+.pill-mini{font-size:11px;font-weight:600;color:var(--brand);background:var(--brand-soft);
+  border-radius:999px;padding:3px 10px;}
+
+/* 通用页面元素 */
+.phead{margin-bottom:12px;}
+.phead h2{font-size:21px;font-weight:700;}
+.phead p{font-size:12.5px;color:var(--t3);margin-top:3px;}
+.sect{display:flex;align-items:center;gap:8px;margin:0 0 8px;}
+.sect i{width:5px;height:15px;border-radius:2px;background:var(--brand);}
+.sect b{font-size:13px;font-weight:700;color:var(--t2);}
+.sect .cnt{margin-left:auto;font-size:11.5px;color:var(--t4);}
+
+.drop{border:1.5px dashed #c6cff5;background:#f8faff;border-radius:var(--radius);
+  padding:16px;text-align:center;cursor:pointer;flex:0 0 auto;}
+.drop:hover{border-color:var(--brand);background:#e3e6fd;}
+.drop b{display:block;font-size:13.5px;font-weight:600;color:var(--t2);}
+.drop span{display:block;font-size:12px;color:var(--t4);margin-top:5px;}
+
+.tasklist{background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  min-height:176px;display:flex;align-items:center;justify-content:center;
+  color:var(--t4);font-size:12.5px;flex:0 0 auto;}
+
+.pcard{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px;}
+
+/* 两列表单 */
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 22px;}
+.grid2 .span2{grid-column:1 / -1;}
+.field{display:grid;grid-template-columns:88px minmax(0,1fr);align-items:center;gap:10px;min-height:34px;}
+.field>label{font-size:12.5px;color:var(--t2);white-space:nowrap;}
+.field .ctl{display:flex;align-items:center;gap:8px;min-width:0;}
+.field .ctl.grow>*:first-child{flex:1;min-width:0;}
+
+/* 控件 */
+.seg{display:inline-flex;background:var(--bg);border-radius:var(--radius-sm);padding:3px;gap:2px;}
+.seg span{font-size:12px;color:var(--t3);padding:5px 14px;border-radius:7px;cursor:pointer;font-weight:500;}
+.seg span.on{background:#fff;color:var(--brand);font-weight:600;box-shadow:0 1px 3px rgba(28,35,51,.08);}
+.seg.tight span{padding:5px 10px;}
+.sel{background:#fff;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
+  padding:6px 11px;font-size:13px;color:var(--t1);display:flex;align-items:center;justify-content:space-between;
+  gap:10px;min-width:0;}
+.sel .arrow{color:var(--t4);font-size:10px;}
+.input{background:#fff;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
+  padding:7px 11px;font-size:13px;color:var(--t1);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.input.ph{color:var(--t4);}
+.btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:var(--radius-sm);
+  padding:8px 16px;border:1px solid transparent;cursor:pointer;white-space:nowrap;}
+.btn.primary{background:var(--brand);color:#fff;}
+.btn.primary:hover{background:var(--brand-hover);}
+.btn.ghost{background:#fff;color:var(--t2);border-color:var(--line-strong);}
+.btn.ghost:hover{border-color:var(--brand);color:var(--brand);background:#f6f7fe;}
+.btn.mini{font-size:11px;padding:5px 10px;border-radius:7px;}
+.help{width:16px;height:16px;border-radius:8px;background:var(--bg);color:#8b93ab;
+  font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;}
+.valpill{font-size:13px;font-weight:700;color:var(--brand);background:var(--brand-soft);
+  border-radius:8px;padding:5px 10px;min-width:40px;text-align:center;}
+.tagtxt{font-size:11px;color:#8b93ab;min-width:46px;}
+.tag{font-size:10px;font-weight:700;color:var(--warn);background:var(--warn-soft);
+  border-radius:5px;padding:2px 7px;}
+
+/* 滑杆 */
+.slider{position:relative;height:22px;flex:1;min-width:80px;display:flex;align-items:center;}
+.slider .track{position:absolute;left:0;right:0;height:4px;border-radius:4px;background:#e3e6f0;}
+.slider .fill{position:absolute;left:0;height:4px;border-radius:4px;background:var(--brand);}
+.slider .knob{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--brand);
+  transform:translateX(-7px);box-shadow:0 1px 3px rgba(79,91,213,.4);}
+
+/* 说明卡 */
+.infocard{background:#f3f5fd;border:1px solid #e3e7f5;border-radius:var(--radius-sm);padding:13px 14px;
+  display:flex;flex-direction:column;gap:9px;height:100%;}
+.infocard .top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.infocard .nm{font-size:13px;font-weight:700;color:var(--t1);}
+.infocard .desc{font-size:11.5px;color:var(--t3);line-height:1.65;}
+.infocard .chip{font-size:10.5px;font-weight:700;color:var(--brand);background:#fff;
+  border:1px solid var(--brand-line);border-radius:6px;padding:3px 8px;white-space:nowrap;}
+.kv{display:flex;flex-direction:column;gap:7px;margin-top:2px;}
+.kv .row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;}
+.kv .k{color:#8b93ab;}
+.kv .v{color:var(--t1);font-weight:600;text-align:right;}
+
+/* 操作栏 */
+.actions{display:flex;align-items:center;gap:9px;margin-top:auto;padding-top:14px;}
+.actions .left{font-size:11.5px;color:var(--t4);}
+.actions .spacer{flex:1;}
+
+/* 标注 */
+.notes{margin-top:16px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+.notes h3{font-size:13px;font-weight:700;color:var(--t2);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.notes h3 i{width:5px;height:14px;border-radius:2px;background:var(--warn);}
+.notes ol{margin-left:18px;display:flex;flex-direction:column;gap:7px;}
+.notes li{font-size:12.5px;color:var(--t2);line-height:1.6;}
+.notes li b{color:var(--brand);}
+.notes .tag-before{font-size:10.5px;color:var(--t4);background:var(--bg);border-radius:5px;padding:1px 6px;margin-left:6px;}
+
+/* 总览卡片 */
+.mgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.mcard{background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 15px;min-height:134px;display:flex;flex-direction:column;cursor:pointer;transition:.15s;}
+.mcard:hover{border-color:var(--brand);background:#fbfcff;}
+.mcard .top{display:flex;align-items:center;gap:9px;}
+.mcard .ico{width:32px;height:32px;border-radius:9px;background:var(--brand-soft);
+  display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--brand);flex:0 0 auto;}
+.mcard .nm{font-size:13.5px;font-weight:700;}
+.mcard .badge{margin-left:auto;font-size:10.5px;font-weight:600;border-radius:999px;padding:2px 9px;
+  background:var(--ok-soft);color:var(--ok);}
+.mcard .badge.cfg{background:var(--bg);color:var(--t3);}
+.mcard .ds{font-size:11.5px;color:var(--t3);line-height:1.55;margin-top:9px;}
+
+.envstrip{background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  padding:13px 16px;display:flex;align-items:center;gap:14px;}
+.envstrip .txt{font-size:12.5px;color:var(--t2);}
+.envstrip .pill{font-size:11.5px;font-weight:600;border-radius:999px;padding:3px 10px;
+  background:var(--brand-soft);color:var(--brand);}
+.envstrip .pill.soft{background:var(--bg);color:var(--t3);}
+
+/* 文件整理 */
+.split{display:flex;gap:14px;flex:1;min-height:0;}
+.rleft{width:400px;flex:0 0 400px;display:flex;flex-direction:column;gap:12px;}
+.rright{flex:1;min-width:0;display:flex;flex-direction:column;}
+.preview{background:#fff;border:1px solid var(--line);border-radius:var(--radius);flex:1;
+  display:flex;flex-direction:column;min-height:0;}
+.preview .th{display:flex;padding:10px 14px;border-bottom:1px solid var(--line);
+  font-size:11.5px;color:var(--t4);font-weight:600;}
+.preview .th span:first-child{flex:1;}
+.preview .th span:last-child{width:200px;}
+.preview .empty{flex:1;display:flex;align-items:center;justify-content:center;
+  color:var(--t4);font-size:12.5px;}
+.chips{display:flex;flex-wrap:wrap;gap:6px;}
+.chip{font-size:11px;font-weight:600;color:var(--brand);background:var(--brand-soft);
+  border:1px solid var(--brand-line);border-radius:6px;padding:4px 8px;cursor:pointer;}
+.chip:hover{background:#e3e6fd;}
+.chip .d{color:#8b93ab;font-weight:500;margin-left:5px;}
+
+/* 设置 */
+.setcard{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;}
+.settitle{font-size:13px;font-weight:700;color:var(--t2);display:flex;align-items:center;gap:7px;margin-bottom:11px;}
+.settitle .help{margin-left:2px;}
+.ro{font-size:12.5px;color:var(--t3);}
+.ro b{color:var(--t1);font-weight:600;}
+.warnline{font-size:11.5px;color:#d1495b;margin-top:7px;}
+
+/* ================= 下拉展开态 ================= */
+.ddgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;}
+.ddcell{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:14px;}
+.ddcell .hd{display:flex;align-items:center;gap:7px;margin-bottom:11px;}
+.ddcell .hd b{font-size:12.5px;font-weight:700;color:var(--t2);}
+.ddcell .hd .pge{margin-left:auto;font-size:10px;font-weight:700;color:var(--t4);
+  background:var(--bg);border-radius:5px;padding:2px 7px;}
+.ddclose{background:#fff;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
+  padding:7px 11px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.ddclose .arrow{color:var(--t4);font-size:10px;}
+.ddopen{margin-top:7px;background:#fff;border:1px solid var(--line-strong);
+  border-radius:var(--radius-sm);padding:5px 4px;
+  box-shadow:0 12px 30px -10px rgba(28,35,51,.26),0 0 0 1px rgba(79,91,213,.06);}
+.ddopen.focus{border-color:var(--brand);}
+.dditem{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--t1);
+  padding:7px 10px;border-radius:6px;cursor:pointer;}
+.dditem .lb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dditem .hint{margin-left:auto;font-size:10.5px;color:var(--t4);white-space:nowrap;flex:0 0 auto;}
+.dditem .ck{margin-left:auto;color:var(--brand);font-size:11px;font-weight:700;flex:0 0 auto;}
+.dditem.hot{background:var(--brand-soft);color:var(--brand);}
+.dditem.on{background:var(--brand);color:#fff;font-weight:600;}
+.dditem.on .ck{color:#fff;}
+.dditem.on .hint{color:rgba(255,255,255,.72);}
+.dditem.dis{color:#b9bfd2;cursor:default;}
+.ddsep{height:1px;background:var(--line);margin:5px 8px;}
+.ddscroll{max-height:132px;overflow:hidden;position:relative;}
+.ddscroll:after{content:"";position:absolute;left:0;right:0;bottom:0;height:22px;
+  background:linear-gradient(transparent,#fff);pointer-events:none;border-radius:0 0 8px 8px;}
+.ddlegend{display:flex;gap:20px;flex-wrap:wrap;margin:0 0 14px;font-size:11.5px;color:var(--t3);}
+.ddlegend span{display:flex;align-items:center;gap:6px;}
+.ddlegend i{width:22px;height:14px;border-radius:4px;display:inline-block;}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>MediaDesk 页面优化预览稿</h1>
+  <p>覆盖 7 个页面：视觉规范统一 + 参数体系对齐 + 明显缺陷修复。本稿为静态预览，确认后再落到 Python 代码。</p>
+  <div class="legend">
+    <span><i style="background:var(--brand)"></i>主色/选中态</span>
+    <span><i style="background:var(--warn)"></i>已自定义 / 本轮改动标记</span>
+    <span><i style="background:var(--ok)"></i>可用状态</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="on" data-v="v1">1 总览</button>
+  <button data-v="v2">2 视频压缩</button>
+  <button data-v="v3">3 视频切割</button>
+  <button data-v="v4">4 视频拼接</button>
+  <button data-v="v5">5 格式转换</button>
+  <button data-v="v6">6 文件整理</button>
+  <button data-v="v7">7 全局设置</button>
+  <button data-v="v8">8 下拉子项</button>
+</div>
+
+<div class="stage">
+
+<!-- ======================= 1 总览 ======================= -->
+<div class="view on" id="v1">
+  <div class="win">
+    <div class="titlebar">
+      <div class="logo">M</div>
+      <div class="iconbtn">☰</div>
+      <div class="apptitle">媒体工作台</div>
+      <div class="tagline">MediaDesk</div>
+      <div class="spacer"></div>
+      <div class="caps">NVENC · 硬编</div>
+      <div class="wbtn">—</div><div class="wbtn">□</div><div class="wbtn close">✕</div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="brand"><b>MediaDesk</b><span>媒体工作台</span></div>
+        <div class="navgroup">工作台</div>
+        <div class="navitem on"><span class="navico">▦</span>总览</div>
+        <div class="navitem"><span class="navico">▷</span>视频压缩</div>
+        <div class="navitem"><span class="navico">✂</span>视频切割</div>
+        <div class="navitem"><span class="navico">⇄</span>视频拼接</div>
+        <div class="navitem"><span class="navico">◯</span>格式转换</div>
+        <div class="navitem"><span class="navico">▤</span>文件整理</div>
+        <div class="navgroup">系统</div>
+        <div class="navitem"><span class="navico">✳</span>全局设置</div>
+        <div class="sidefoot"><span class="dot"></span><span>FFmpeg 可用 · hevc_nvenc</span></div>
+      </div>
+      <div class="content">
+        <div class="phead">
+          <h2>总览</h2>
+          <p>把零散的 FFmpeg 能力收拢到一个统一的桌面客户端。</p>
+        </div>
+
+        <div class="sect"><i></i><b>环境状态</b></div>
+        <div class="envstrip">
+          <span class="dot"></span>
+          <span class="txt">FFmpeg 可用</span>
+          <span class="pill">hevc_nvenc · 硬件加速</span>
+          <span class="pill soft">编码器 hevc_nvenc</span>
+          <div class="spacer"></div>
+          <span class="btn ghost mini">重新检测</span>
+        </div>
+
+        <div class="sect" style="margin-top:18px"><i></i><b>模块</b><span class="cnt">6 个功能模块</span></div>
+        <div class="mgrid">
+          <div class="mcard">
+            <div class="top"><div class="ico">▷</div><div class="nm">视频压缩</div><div class="badge">已可用</div></div>
+            <div class="ds">多文件拖入，硬件加速，实时进度；四档位预设包与码率双模式。</div>
+          </div>
+          <div class="mcard">
+            <div class="top"><div class="ico">✂</div><div class="nm">视频切割</div><div class="badge">已可用</div></div>
+            <div class="ds">按时间段切割，快速流复制 / 精确重编码。</div>
+          </div>
+          <div class="mcard">
+            <div class="top"><div class="ico">⇄</div><div class="nm">视频拼接</div><div class="badge">已可用</div></div>
+            <div class="ds">多视频按序拼接，快速 / 统一重编码。</div>
+          </div>
+          <div class="mcard">
+            <div class="top"><div class="ico">◯</div><div class="nm">格式转换</div><div class="badge">已可用</div></div>
+            <div class="ds">mp4 / webm / mkv，分辨率、画质、GPU、音频。</div>
+          </div>
+          <div class="mcard">
+            <div class="top"><div class="ico">▤</div><div class="nm">文件整理</div><div class="badge">已可用</div></div>
+            <div class="ds">中文名加拼音前缀，垃圾清理，干跑预览。</div>
+          </div>
+          <div class="mcard">
+            <div class="top"><div class="ico">✳</div><div class="nm">全局设置</div><div class="badge cfg">可配置</div></div>
+            <div class="ds">FFmpeg 路径 / GPU / 输出目录 / 并发。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span class="stat">运行中 <b>0</b></span>
+      <span class="stat">完成 <b>0</b></span>
+      <span class="stat">失败 <b>0</b></span>
+      <div class="spacer"></div>
+      <span class="pill-mini">硬件加速 · hevc_nvenc</span>
+      <span class="btn ghost mini">停止全部</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3><i></i>本轮改动</h3>
+    <ol>
+      <li><b>模块卡片增加统一高度（134px）与内边距</b>，「已可用」状态改为与图标、标题同行，不再飘到卡片最右端。<span class="tag-before">原来：标签被推到很远处</span></li>
+      <li><b>卡片边框改为悬停加深</b>，当前无边框感的问题消除；描述文字统一两行高度，六张卡底部对齐。</li>
+      <li><b>环境状态条补上「重新检测」入口</b>，并把编码器信息做成胶囊；与侧边栏底部状态不再重复「检测中…」文案。</li>
+      <li><b>分区标题右侧增加计数</b>（6 个功能模块），减少下方大段空白带来的松散感。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================= 2 视频压缩 ======================= -->
+<div class="view" id="v2">
+  <div class="win">
+    <div class="titlebar">
+      <div class="logo">M</div><div class="iconbtn">☰</div>
+      <div class="apptitle">媒体工作台</div><div class="tagline">MediaDesk</div>
+      <div class="spacer"></div><div class="caps">NVENC · 硬编</div>
+      <div class="wbtn">—</div><div class="wbtn">□</div><div class="wbtn close">✕</div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="brand"><b>MediaDesk</b><span>媒体工作台</span></div>
+        <div class="navgroup">工作台</div>
+        <div class="navitem"><span class="navico">▦</span>总览</div>
+        <div class="navitem on"><span class="navico">▷</span>视频压缩</div>
+        <div class="navitem"><span class="navico">✂</span>视频切割</div>
+        <div class="navitem"><span class="navico">⇄</span>视频拼接</div>
+        <div class="navitem"><span class="navico">◯</span>格式转换</div>
+        <div class="navitem"><span class="navico">▤</span>文件整理</div>
+        <div class="navgroup">系统</div>
+        <div class="navitem"><span class="navico">✳</span>全局设置</div>
+        <div class="sidefoot"><span class="dot"></span><span>FFmpeg 可用 · hevc_nvenc</span></div>
+      </div>
+      <div class="content">
+        <div class="phead"><h2>视频压缩</h2><p>多文件拖入，硬件加速，实时进度</p></div>
+
+        <div class="drop">
+          <b>把多个视频拖到这里，或点击添加</b>
+          <span>支持批量 · mp4 / mkv / mov / webm / avi / ts</span>
+        </div>
+
+        <div class="sect" style="margin-top:14px"><i></i><b>任务列表</b><span class="cnt">共 0 个</span></div>
+        <div class="tasklist">暂无文件 — 拖拽视频到上方虚线框，或点击上方虚线框添加</div>
+
+        <div class="sect" style="margin-top:16px"><i></i><b>压缩参数</b></div>
+        <div class="pcard">
+          <div class="grid2">
+            <!-- 左列 -->
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <div class="field"><label>压缩档位</label>
+                <div class="ctl grow" style="flex-wrap:wrap">
+                  <div class="seg tight">
+                    <span>极致画质</span><span class="on">高画质</span><span>均衡</span><span>快速</span>
+                  </div>
+                  <span class="tag">已自定义</span>
+                  <span class="help">?</span>
+                </div>
+              </div>
+
+              <div class="field"><label>画质控制</label>
+                <div class="ctl"><div class="seg"><span class="on">CRF 恒定画质</span><span>目标码率</span></div><span class="help">?</span></div>
+              </div>
+
+              <div class="field"><label>CRF</label>
+                <div class="ctl grow">
+                  <div class="slider"><div class="track"></div><div class="fill" style="width:41%"></div><div class="knob" style="left:41%"></div></div>
+                  <span class="valpill">18</span><span class="tagtxt">高画质</span>
+                  <button class="btn ghost mini">恢复档位默认</button>
+                </div>
+              </div>
+
+              <div class="field"><label>分辨率</label>
+                <div class="ctl grow"><div class="sel" style="flex:1"><span>保持原尺寸</span><span class="arrow">▾</span></div><span class="help">?</span></div>
+              </div>
+
+              <div class="field"><label>帧率</label>
+                <div class="ctl"><div class="sel" style="min-width:130px"><span>保持原样</span><span class="arrow">▾</span></div><span class="help">?</span></div>
+              </div>
+
+              <div class="field"><label>命名后缀</label>
+                <div class="ctl grow"><div class="input">_compressed</div><span class="help">?</span></div>
+              </div>
+            </div>
+
+            <!-- 右列：说明卡 -->
+            <div>
+              <div class="infocard">
+                <div class="top">
+                  <div>
+                    <div class="nm">高画质 — 高保真重编码</div>
+                    <div class="desc" style="margin-top:4px">体积明显小于原片，画质肉眼难辨差异。</div>
+                  </div>
+                  <div class="chip">CRF 18 · 可变码率</div>
+                </div>
+                <div class="kv">
+                  <div class="row"><span class="k">预估体积（相对原片）</span><span class="v">28% – 57%</span></div>
+                  <div class="row"><span class="k">软编速度</span><span class="v">约 0.6 – 1.5 倍实时</span></div>
+                  <div class="row"><span class="k">硬编速度（NVENC）</span><span class="v">约 6 – 15 倍实时</span></div>
+                  <div class="row"><span class="k">典型码率</span><span class="v">6.0 Mbps</span></div>
+                </div>
+                <div class="desc" style="border-top:1px solid #e3e7f5;padding-top:9px">
+                  CRF 已由档位默认 20 手动调至 18，体积预估已按新 CRF 实时重算。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <span class="left">待添加文件</span>
+          <div class="spacer"></div>
+          <button class="btn ghost">停止本轮</button>
+          <button class="btn ghost">追加文件</button>
+          <button class="btn primary">开始压缩</button>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span class="stat">运行中 <b>0</b></span><span class="stat">完成 <b>0</b></span><span class="stat">失败 <b>0</b></span>
+      <div class="spacer"></div><span class="pill-mini">硬件加速 · hevc_nvenc</span>
+      <span class="btn ghost mini">停止全部</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3><i></i>本轮改动</h3>
+    <ol>
+      <li><b>参数区改为两列</b>：左侧放可调参数，右侧固定放档位说明卡，把原来空着的右半屏用起来。<span class="tag-before">原来：单列靠左，右侧 40% 空白</span></li>
+      <li><b>修复分辨率行残留</b>：非「自定义」时不再显示多余的 <b>×</b> 与宽高输入框。<span class="tag-before">缺陷</span></li>
+      <li><b>任务列表高度由 240 → 176</b>，空状态提示不再把参数区挤到需要滚动才能看全。</li>
+      <li><b>档位与 CRF 行合并排布</b>，滑杆长度受控，「恢复档位默认」按钮跟随数值，不再贴到最右边。</li>
+      <li><b>帧率、命名后缀等高级项不再折叠</b>，直接进主表单（默认值不变，避免多一次点击）。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================= 3 视频切割 ======================= -->
+<div class="view" id="v3">
+  <div class="win">
+    <div class="titlebar">
+      <div class="logo">M</div><div class="iconbtn">☰</div>
+      <div class="apptitle">媒体工作台</div><div class="tagline">MediaDesk</div>
+      <div class="spacer"></div><div class="caps">NVENC · 硬编</div>
+      <div class="wbtn">—</div><div class="wbtn">□</div><div class="wbtn close">✕</div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="brand"><b>MediaDesk</b><span>媒体工作台</span></div>
+        <div class="navgroup">工作台</div>
+        <div class="navitem"><span class="navico">▦</span>总览</div>
+        <div class="navitem"><span class="navico">▷</span>视频压缩</div>
+        <div class="navitem on"><span class="navico">✂</span>视频切割</div>
+        <div class="navitem"><span class="navico">⇄</span>视频拼接</div>
+        <div class="navitem"><span class="navico">◯</span>格式转换</div>
+        <div class="navitem"><span class="navico">▤</span>文件整理</div>
+        <div class="navgroup">系统</div>
+        <div class="navitem"><span class="navico">✳</span>全局设置</div>
+        <div class="sidefoot"><span class="dot"></span><span>FFmpeg 可用 · hevc_nvenc</span></div>
+      </div>
+      <div class="content">
+        <div class="phead"><h2>视频切割</h2><p>按时间段切割，快速流复制 / 精确重编码</p></div>
+
+        <div class="drop">
+          <b>把多个视频拖到这里，或点击添加</b>
+          <span>支持批量 · 每个文件可设置多段时间段</span>
+        </div>
+
+        <div class="sect" style="margin-top:14px"><i></i><b>任务列表</b><span class="cnt">共 0 个</span></div>
+        <div class="tasklist">暂无文件 — 拖拽视频到上方虚线框，或点击上方虚线框添加</div>
+
+        <div class="sect" style="margin-top:16px"><i></i><b>切割参数</b></div>
+        <div class="pcard">
+          <div class="grid2">
+            <div class="field"><label>切割方式</label>
+              <div class="ctl"><div class="sel" style="flex:1"><span>精确重编码（默认）</span><span class="arrow">▾</span></div><span class="help">?</span></div>
+            </div>
+            <div class="field"><label>重编码速度</label>
+              <div class="ctl grow" style="flex-wrap:wrap">
+                <div class="seg tight"><span>极致画质</span><span class="on">高画质</span><span>均衡</span><span>快速</span></div>
+                <span class="help">?</span>
+              </div>
+            </div>
+            <div class="field span2"><label>CRF 画质</label>
+              <div class="ctl grow">
+                <div class="slider"><div class="track"></div><div class="fill" style="width:38%"></div><div class="knob" style="left:38%"></div></div>
+                <span class="valpill">18</span><span class="tagtxt">高画质</span>
+                <span class="desc" style="font-size:11px;color:#8b93ab;margin-left:6px">越低画质越好、体积越大</span>
+              </div>
+            </div>
+            <div class="field span2"><label>输出目录</label>
+              <div class="ctl grow">
+                <div class="sel" style="max-width:150px"><span>同源目录 /out</span><span class="arrow">▾</span></div>
+                <div class="input ph" style="flex:1">点击「浏览」选择自定义输出目录…</div>
+                <button class="btn ghost mini">浏览</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <span class="left">待添加文件</span>
+          <div class="spacer"></div>
+          <button class="btn ghost">停止本轮</button>
+          <button class="btn ghost">追加文件</button>
+          <button class="btn primary">开始切割</button>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span class="stat">运行中 <b>0</b></span><span class="stat">完成 <b>0</b></span><span class="stat">失败 <b>0</b></span>
+      <div class="spacer"></div><span class="pill-mini">硬件加速 · hevc_nvenc</span>
+      <span class="btn ghost mini">停止全部</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3><i></i>本轮改动</h3>
+    <ol>
+      <li><b>档位体系与压缩页对齐</b>：原来「超快 / 平衡 / 快速」改为 <b>极致画质 / 高画质 / 均衡 / 快速</b> 四档，命名全站统一。<span class="tag-before">体系不一致</span></li>
+      <li><b>CRF 数字框改为滑杆 + 数值胶囊</b>，与压缩页控件形态一致，并补上「越低画质越好」的说明。</li>
+      <li><b>参数区改两列</b>，输出目录行单独占满一行，消除右侧空白与超长输入框。</li>
+      <li><b>任务列表高度下调</b>，参数区无需滚动即可完整看到。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================= 4 视频拼接 ======================= -->
+<div class="view" id="v4">
+  <div class="win">
+    <div class="titlebar">
+      <div class="logo">M</div><div class="iconbtn">☰</div>
+      <div class="apptitle">媒体工作台</div><div class="tagline">MediaDesk</div>
+      <div class="spacer"></div><div class="caps">NVENC · 硬编</div>
+      <div class="wbtn">—</div><div class="wbtn">□</div><div class="wbtn close">✕</div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="brand"><b>MediaDesk</b><span>媒体工作台</span></div>
+        <div class="navgroup">工作台</div>
+        <div class="navitem"><span class="navico">▦</span>总览</div>
+        <div class="navitem"><span class="navico">▷</span>视频压缩</div>
+        <div class="navitem"><span class="navico">✂</span>视频切割</div>
+        <div class="navitem on"><span class="navico">⇄</span>视频拼接</div>
+        <div class="navitem"><span class="navico">◯</span>格式转换</div>
+        <div class="navitem"><span class="navico">▤</span>文件整理</div>
+        <div class="navgroup">系统</div>
+        <div class="navitem"><span class="navico">✳</span>全局设置</div>
+        <div class="sidefoot"><span class="dot"></span><span>FFmpeg 可用 · hevc_nvenc</span></div>
+      </div>
+      <div class="content">
+        <div class="phead"><h2>视频拼接</h2><p>多视频按序拼接，快速 / 统一重编码</p></div>
+
+        <div class="drop">
+          <b>把要拼接的视频按序拖到这里，或点击添加</b>
+          <span>列表自上而下即拼接顺序</span>
+        </div>
+
+        <div class="sect" style="margin-top:14px"><i></i><b>拼接文件</b><span class="cnt">0 个文件，待添加</span></div>
+        <div class="tasklist">暂无文件 — 拖拽或点击上方虚线框添加，列表自上而下即拼接顺序</div>
+
+        <div class="sect" style="margin-top:16px"><i></i><b>拼接参数</b></div>
+        <div class="pcard">
+          <div class="grid2">
+            <div class="field"><label>拼接方式</label>
+              <div class="ctl"><div class="sel" style="flex:1"><span>快速流复制（推荐）</span><span class="arrow">▾</span></div><span class="help">?</span></div>
+            </div>
+            <div class="field"><label>重编码速度</label>
+              <div class="ctl grow" style="flex-wrap:wrap">
+                <div class="seg tight" style="opacity:.45"><span>极致画质</span><span>高画质</span><span>均衡</span><span>快速</span></div>
+                <span class="help">?</span>
+              </div>
+            </div>
+            <div class="field"><label>CRF 画质</label>
+              <div class="ctl grow" style="opacity:.45">
+                <div class="slider"><div class="track"></div><div class="fill" style="width:30%"></div><div class="knob" style="left:30%"></div></div>
+                <span class="valpill">18</span>
+              </div>
+            </div>
+            <div class="field"><label>输出后缀</label>
+              <div class="ctl grow"><div class="input">_concat</div><span class="help">?</span></div>
+            </div>
+            <div class="field span2"><label>输出目录</label>
+              <div class="ctl grow">
+                <div class="sel" style="max-width:150px"><span>同源目录 /out</span><span class="arrow">▾</span></div>
+                <div class="input ph" style="flex:1">点击「浏览」选择自定义输出目录…</div>
+                <button class="btn ghost mini">浏览</button>
+              </div>
+            </div>
+            <div class="desc span2" style="font-size:11.5px;color:#8b93ab">
+              当前为快速流复制模式，不重新编码，速度最快；切换到「统一重编码」后才可调整速度与 CRF。
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <span class="left">0 个文件，待添加</span>
+          <div class="spacer"></div>
+          <button class="btn ghost">停止</button>
+          <button class="btn ghost">清空列表</button>
+          <button class="btn ghost">追加文件</button>
+          <button class="btn primary">开始拼接</button>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span class="stat">运行中 <b>0</b></span><span class="stat">完成 <b>0</b></span><span class="stat">失败 <b>0</b></span>
+      <div class="spacer"></div><span class="pill-mini">硬件加速 · hevc_nvenc</span>
+      <span class="btn ghost mini">停止全部</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3><i></i>本轮改动</h3>
+    <ol>
+      <li><b>进度条移入操作栏</b>，不再横跨页面底部单独占一行。<span class="tag-before">原来：按钮下方一条全宽进度条</span></li>
+      <li><b>档位体系对齐四档</b>，禁用态用整体降透明度表达，不再是三个灰按钮占位。</li>
+      <li><b>补一行模式说明</b>：流复制模式下为何不可调速度/CRF，避免误以为控件坏了。</li>
+      <li><b>参数区改两列</b>，输出后缀不再被挤成窄条，输出目录独占一行。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================= 5 格式转换 ======================= -->
+<div class="view" id="v5">
+  <div class="win">
+    <div class="titlebar">
+      <div class="logo">M</div><div class="iconbtn">☰</div>
+      <div class="apptitle">媒体工作台</div><div class="tagline">MediaDesk</div>
+      <div class="spacer"></div><div class="caps">NVENC · 硬编</div>
+      <div class="wbtn">—</div><div class="wbtn">□</div><div class="wbtn close">✕</div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="brand"><b>MediaDesk</b><span>媒体工作台</span></div>
+        <div class="navgroup">工作台</div>
+        <div class="navitem"><span class="navico">▦</span>总览</div>
+        <div class="navitem"><span class="navico">▷</span>视频压缩</div>
+        <div class="navitem"><span class="navico">✂</span>视频切割</div>
+        <div class="navitem"><span class="navico">⇄</span>视频拼接</div>
+        <div class="navitem on"><span class="navico">◯</span>格式转换</div>
+        <div class="navitem"><span class="navico">▤</span>文件整理</div>
+        <div class="navgroup">系统</div>
+        <div class="navitem"><span class="navico">✳</span>全局设置</div>
+        <div class="sidefoot"><span class="dot"></span><span>FFmpeg 可用 · hevc_nvenc</span></div>
+      </div>
+      <div class="content">
+        <div class="phead"><h2>格式转换</h2><p>mp4 / webm / mkv，分辨率 / 画质 / GPU / 音频</p></div>
+
+        <div class="drop">
+          <b>把视频拖到这里，或点击添加</b>
+          <span>支持 mp4 / mkv / mov / webm / avi / ts · 转换输出到设置目录</span>
+        </div>
+
+        <div class="sect" style="margin-top:14px"><i></i><b>任务列表</b><span class="cnt">共 0 个</span></div>
+        <div class="tasklist">暂无文件 — 拖拽视频到上方虚线框，或点击上方虚线框添加</div>
+
+        <div class="sect" style="margin-top:16px"><i></i><b>输出设置</b></div>
+        <div class="pcard">
+          <div class="grid2">
+            <div class="field"><label>目标格式</label>
+              <div class="ctl"><div class="sel" style="flex:1"><span>MP4（H.264 / H.265）</span><span class="arrow">▾</span></div><span class="help">?</span></div>
+            </div>
+            <div class="field"><label>画质档位</label>
+              <div class="ctl grow"><div class="seg tight"><span>高画质</span><span class="on">均衡</span><span>小体积</span></div><span class="help">?</span></div>
+            </div>
+            <div class="field"><label>分辨率</label>
+              <div class="ctl grow"><div class="sel" style="flex:1"><span>保持原尺寸</span><span class="arrow">▾</span></div><span class="help">?</span></div>
+            </div>
+            <div class="field"><label>音频</label>
+              <div class="ctl"><div class="sel" style="min-width:150px"><span>保留（重编码）</span><span class="arrow">▾</span></div><span class="help">?</span></div>
+            </div>
+            <div class="field"><label>硬件加速</label>
+              <div class="ctl"><span style="width:18px;height:18px;border:1px solid #c3cadb;border-radius:6px;background:#fff;display:inline-block"></span>
+                <span style="font-size:13px">使用 GPU 硬件编码</span><span class="help">?</span></div>
+            </div>
+            <div class="field"><label>仅提取音频</label>
+              <div class="ctl"><span style="width:18px;height:18px;border:1px solid #c3cadb;border-radius:6px;background:#fff;display:inline-block"></span>
+                <span style="font-size:13px">转为 m4a，不转视频</span><span class="help">?</span></div>
+            </div>
+            <div class="field span2"><label>输出目录</label>
+              <div class="ctl grow">
+                <div class="sel" style="max-width:150px"><span>同源目录 /out</span><span class="arrow">▾</span></div>
+                <div class="input ph" style="flex:1">点击「浏览」选择自定义输出目录…</div>
+                <button class="btn ghost mini">浏览</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <span class="left">待添加文件</span>
+          <div class="spacer"></div>
+          <button class="btn ghost">停止本轮</button>
+          <button class="btn ghost">追加文件</button>
+          <button class="btn primary">开始转换</button>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span class="stat">运行中 <b>0</b></span><span class="stat">完成 <b>0</b></span><span class="stat">失败 <b>0</b></span>
+      <div class="spacer"></div><span class="pill-mini">硬件加速 · hevc_nvenc</span>
+      <span class="btn ghost mini">停止全部</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3><i></i>本轮改动</h3>
+    <ol>
+      <li><b>修复分辨率残留输入框</b>：选「保持原尺寸」时不再显示可编辑的「如 1600x900」输入框，只有选「自定义」才出现。<span class="tag-before">缺陷</span></li>
+      <li><b>画质档位并入统一体系</b>：高画质 / 均衡 / 小体积，用词与压缩页一致（原「平衡」→「均衡」）。</li>
+      <li><b>参数区改两列</b>：格式 / 画质 / 分辨率 / 音频 / GPU / 提取音频排成 3 行 2 列，输出目录独占一行。</li>
+      <li><b>复选框视觉统一</b>，去掉图标字符在部分字体下显示异常的问题。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================= 6 文件整理 ======================= -->
+<div class="view" id="v6">
+  <div class="win">
+    <div class="titlebar">
+      <div class="logo">M</div><div class="iconbtn">☰</div>
+      <div class="apptitle">媒体工作台</div><div class="tagline">MediaDesk</div>
+      <div class="spacer"></div><div class="caps">NVENC · 硬编</div>
+      <div class="wbtn">—</div><div class="wbtn">□</div><div class="wbtn close">✕</div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="brand"><b>MediaDesk</b><span>媒体工作台</span></div>
+        <div class="navgroup">工作台</div>
+        <div class="navitem"><span class="navico">▦</span>总览</div>
+        <div class="navitem"><span class="navico">▷</span>视频压缩</div>
+        <div class="navitem"><span class="navico">✂</span>视频切割</div>
+        <div class="navitem"><span class="navico">⇄</span>视频拼接</div>
+        <div class="navitem"><span class="navico">◯</span>格式转换</div>
+        <div class="navitem on"><span class="navico">▤</span>文件整理</div>
+        <div class="navgroup">系统</div>
+        <div class="navitem"><span class="navico">✳</span>全局设置</div>
+        <div class="sidefoot"><span class="dot"></span><span>FFmpeg 可用 · hevc_nvenc</span></div>
+      </div>
+      <div class="content">
+        <div class="phead"><h2>文件整理</h2><p>规则驱动批量重命名：操作类型 + 实时预览，确认后落地。</p></div>
+
+        <div class="field span2" style="grid-template-columns:70px 1fr;margin-bottom:14px">
+          <label>目标目录</label>
+          <div class="ctl grow">
+            <div class="input ph" style="flex:1">选择要整理的文件夹…</div>
+            <button class="btn ghost mini">扫描</button>
+            <button class="btn ghost mini">浏览</button>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="rleft">
+            <div class="pcard" style="display:flex;flex-direction:column;gap:11px">
+              <div class="field"><label>操作类型</label>
+                <div class="ctl"><div class="sel" style="flex:1"><span>组合命名模板</span><span class="arrow">▾</span></div></div>
+              </div>
+              <div class="field"><label>模板形式</label>
+                <div class="ctl grow" style="flex-wrap:wrap;gap:5px">
+                  <div class="seg tight"><span class="on">序号串</span><span>随机串</span><span>UUID</span><span>后缀</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="input" style="font-family:Consolas,monospace;font-size:12px;white-space:normal;
+                  word-break:break-all;line-height:1.6">${create_time:yyyy-MM-dd}_${seq:start=1,inc=1}</div>
+              </div>
+              <div>
+                <div class="desc" style="font-size:11px;color:#8b93ab;margin-bottom:6px">点击插入变量</div>
+                <div class="chips">
+                  <span class="chip">${name}<span class="d">原文件名</span></span>
+                  <span class="chip">${seq}<span class="d">序号</span></span>
+                  <span class="chip">${rand}<span class="d">随机串</span></span>
+                  <span class="chip">${uuid}<span class="d">UUID</span></span>
+                  <span class="chip">${ext}<span class="d">扩展名</span></span>
+                  <span class="chip">${date}<span class="d">日期</span></span>
+                  <span class="chip">${time}<span class="d">时间</span></span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;padding-top:4px;border-top:1px solid var(--line)">
+                <span style="width:18px;height:18px;border:1px solid var(--brand);border-radius:6px;
+                  background:var(--brand);color:#fff;font-size:11px;display:inline-flex;
+                  align-items:center;justify-content:center">✓</span>
+                <span style="font-size:13px">保留原扩展名</span>
+              </div>
+              <button class="btn ghost" style="width:100%">清理垃圾文件…</button>
+            </div>
+            <div class="desc" style="font-size:11.5px;color:#8b93ab;line-height:1.6">
+              选择目标目录或拖入文件夹，点击「扫描」后配置规则查看预览。
+            </div>
+          </div>
+
+          <div class="rright">
+            <div class="preview">
+              <div class="th"><span>原名称</span><span>转换后名称</span><span style="width:56px;text-align:right">共 0 项</span></div>
+              <div class="empty">扫描后在此预览重命名结果</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="spacer"></div>
+          <button class="btn ghost">重置规则</button>
+          <button class="btn primary">应用更改</button>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span class="stat">运行中 <b>0</b></span><span class="stat">完成 <b>0</b></span><span class="stat">失败 <b>0</b></span>
+      <div class="spacer"></div><span class="pill-mini">硬件加速 · hevc_nvenc</span>
+      <span class="btn ghost mini">停止全部</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3><i></i>本轮改动</h3>
+    <ol>
+      <li><b>删除「文件信息 / 时间 / 序号 / 随机」四块孤立文字</b>，改为可点击的变量胶囊（chips），插到模板光标处。<span class="tag-before">原来：四个词悬空、间距极大</span></li>
+      <li><b>左栏由 360 → 400px</b>，模板输入框改为自动换行显示，不再被截断成「…」。</li>
+      <li><b>模板输入框用等宽字体</b>，变量与文本更易分辨。</li>
+      <li><b>预览区空态给出引导文案</b>，不再是纯空表格。</li>
+      <li><b>目标目录行合并到顶部</b>，扫描/浏览按钮紧随其后，不再分散。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================= 7 全局设置 ======================= -->
+<div class="view" id="v7">
+  <div class="win">
+    <div class="titlebar">
+      <div class="logo">M</div><div class="iconbtn">☰</div>
+      <div class="apptitle">媒体工作台</div><div class="tagline">MediaDesk</div>
+      <div class="spacer"></div><div class="caps">NVENC · 硬编</div>
+      <div class="wbtn">—</div><div class="wbtn">□</div><div class="wbtn close">✕</div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="brand"><b>MediaDesk</b><span>媒体工作台</span></div>
+        <div class="navgroup">工作台</div>
+        <div class="navitem"><span class="navico">▦</span>总览</div>
+        <div class="navitem"><span class="navico">▷</span>视频压缩</div>
+        <div class="navitem"><span class="navico">✂</span>视频切割</div>
+        <div class="navitem"><span class="navico">⇄</span>视频拼接</div>
+        <div class="navitem"><span class="navico">◯</span>格式转换</div>
+        <div class="navitem"><span class="navico">▤</span>文件整理</div>
+        <div class="navgroup">系统</div>
+        <div class="navitem on"><span class="navico">✳</span>全局设置</div>
+        <div class="sidefoot"><span class="dot"></span><span>FFmpeg 可用 · hevc_nvenc</span></div>
+      </div>
+      <div class="content">
+        <div class="phead"><h2>全局设置</h2><p>集中管理 FFmpeg 路径、硬件加速、输出默认目录与并发上限。</p></div>
+
+        <div class="grid2" style="gap:14px;align-items:start">
+          <div class="setcard">
+            <div class="settitle">FFmpeg 路径 <span class="help">?</span></div>
+            <div class="ctl grow" style="display:flex;gap:8px;margin-bottom:9px">
+              <div class="input ph" style="flex:1">留空 = 使用系统 PATH 中的 ffmpeg</div>
+              <button class="btn ghost mini">浏览</button>
+            </div>
+            <div class="ro">当前使用：<b>内置 ffmpeg 9.0.1</b></div>
+            <div style="display:flex;justify-content:flex-end;margin-top:11px">
+              <button class="btn ghost mini">重新检测环境</button>
+            </div>
+          </div>
+
+          <div class="setcard">
+            <div class="settitle">硬件加速 <span class="help">?</span></div>
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <span style="width:18px;height:18px;border:1px solid var(--brand);border-radius:6px;
+                background:var(--brand);color:#fff;font-size:11px;display:inline-flex;
+                align-items:center;justify-content:center;flex:0 0 auto;margin-top:1px">✓</span>
+              <div>
+                <div style="font-size:13px">允许 GPU 硬件编码（NVENC，需 NVIDIA 显卡）</div>
+                <div class="ro" style="margin-top:4px">检测到 hevc_nvenc / h264_nvenc，已启用硬编。</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="setcard">
+            <div class="settitle">输出目录默认 <span class="help">?</span></div>
+            <div class="ctl grow" style="display:flex;gap:8px">
+              <div class="sel" style="max-width:150px"><span>同源目录 /out</span><span class="arrow">▾</span></div>
+              <div class="input ph" style="flex:1">选择输出目录…</div>
+              <button class="btn ghost mini">浏览</button>
+            </div>
+          </div>
+
+          <div class="setcard">
+            <div class="settitle">默认并发 <span class="help">?</span></div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <div class="input" style="width:74px;text-align:center">0</div>
+              <span class="ro">0 = 自动（min(4, CPU 核心数)）</span>
+            </div>
+          </div>
+
+          <div class="setcard span2" style="grid-column:1/-1">
+            <div class="settitle">任务通知 <span class="help">?</span></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:18px;height:18px;border:1px solid var(--brand);border-radius:6px;
+                background:var(--brand);color:#fff;font-size:11px;display:inline-flex;
+                align-items:center;justify-content:center">✓</span>
+              <span style="font-size:13px">任务全部结束时通知我</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span class="stat">运行中 <b>0</b></span><span class="stat">完成 <b>0</b></span><span class="stat">失败 <b>0</b></span>
+      <div class="spacer"></div><span class="pill-mini">硬件加速 · hevc_nvenc</span>
+      <span class="btn ghost mini">停止全部</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3><i></i>本轮改动</h3>
+    <ol>
+      <li><b>「重新检测环境」由全宽按钮改为右下角小按钮</b>，不再和输入框长得一样。<span class="tag-before">原来：整行带边框，像输入框</span></li>
+      <li><b>「当前使用」改为无边框状态文本</b>，路径信息不再渲染成输入框外观；正常时显示绿色可用状态。</li>
+      <li><b>设置项改为两列卡片</b>，五组设置一屏放下，消除右侧空白与纵向松散。</li>
+      <li><b>并发输入补上说明</b>（0 = 自动），避免不知道填什么。</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================= 8 下拉子项 ======================= -->
+<div class="view" id="v8">
+  <div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;">
+    <div class="phead" style="margin-bottom:14px">
+      <h2 style="font-size:20px">下拉子项设计</h2>
+      <p>全站 12 个下拉框的展开态与完整选项清单。触发器沿用现有白底描边样式，展开层统一为「白底 + 9px 圆角 + 浮起阴影」。</p>
+    </div>
+
+    <div class="ddlegend">
+      <span><i style="background:var(--brand)"></i>当前值 / 键盘高亮</span>
+      <span><i style="background:var(--brand-soft);border:1px solid var(--brand-line)"></i>鼠标悬停</span>
+      <span><i style="background:#fff;border:1px solid var(--line-strong)"></i>普通项</span>
+      <span><i style="background:#fff;border:1px solid var(--line)"></i>禁用项（灰字）</span>
+    </div>
+
+    <div class="ddgrid">
+
+      <!-- 1 输出目录模式 -->
+      <div class="ddcell">
+        <div class="hd"><b>输出目录模式</b><span class="pge">5 页通用</span></div>
+        <div class="ddclose"><span>同源目录 /out</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">同源目录 /out</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">指定目录</span><span class="hint">自选路径</span></div>
+        </div>
+      </div>
+
+      <!-- 2 压缩 · 分辨率 -->
+      <div class="ddcell">
+        <div class="hd"><b>分辨率</b><span class="pge">视频压缩</span></div>
+        <div class="ddclose"><span>保持原尺寸</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">保持原尺寸</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">1920 × 1080</span><span class="hint">1080p</span></div>
+          <div class="dditem"><span class="lb">1280 × 720</span><span class="hint">720p</span></div>
+          <div class="dditem"><span class="lb">854 × 480</span><span class="hint">480p</span></div>
+          <div class="dditem"><span class="lb">640 × 360</span><span class="hint">360p</span></div>
+          <div class="ddsep"></div>
+          <div class="dditem hot"><span class="lb">自定义宽 × 高</span><span class="hint">手动输入</span></div>
+        </div>
+      </div>
+
+      <!-- 3 压缩 · 硬件加速 -->
+      <div class="ddcell">
+        <div class="hd"><b>硬件加速编码器</b><span class="pge">视频压缩</span></div>
+        <div class="ddclose"><span>自动（推荐）</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">自动（推荐）</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">hevc_nvenc</span><span class="hint">硬编 · H.265</span></div>
+          <div class="dditem"><span class="lb">h264_nvenc</span><span class="hint">硬编 · H.264</span></div>
+        </div>
+        <div class="desc" style="font-size:11px;color:#8b93ab;margin-top:9px;line-height:1.55">
+          选项随环境检测动态生成；未检测到 NVENC 时仅保留「自动」。
+        </div>
+      </div>
+
+      <!-- 4 压缩 · 帧率 -->
+      <div class="ddcell">
+        <div class="hd"><b>帧率</b><span class="pge">视频压缩</span></div>
+        <div class="ddclose"><span>保持原值</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">保持原值</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">指定</span><span class="hint">右侧填帧率</span></div>
+        </div>
+      </div>
+
+      <!-- 5 切割 · 切割方式 -->
+      <div class="ddcell">
+        <div class="hd"><b>切割方式</b><span class="pge">视频切割</span></div>
+        <div class="ddclose"><span>精确重编码（默认）</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem"><span class="lb">快速流复制</span><span class="hint">秒切，可能有黑帧</span></div>
+          <div class="dditem on"><span class="lb">精确重编码</span><span class="ck">✓</span></div>
+        </div>
+        <div class="desc" style="font-size:11px;color:#8b93ab;margin-top:9px;line-height:1.55">
+          选「快速流复制」时下方速度与 CRF 自动置灰。
+        </div>
+      </div>
+
+      <!-- 6 切割 · 时间格式 -->
+      <div class="ddcell">
+        <div class="hd"><b>时间格式</b><span class="pge">切割 · 时间段弹窗</span></div>
+        <div class="ddclose"><span>格式：自动识别</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">格式：自动识别</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">秒</span><span class="hint">如 90</span></div>
+          <div class="dditem"><span class="lb">MM:SS</span><span class="hint">如 01:30</span></div>
+          <div class="dditem"><span class="lb">HH:MM:SS</span><span class="hint">如 00:01:30</span></div>
+        </div>
+      </div>
+
+      <!-- 7 拼接 · 拼接方式 -->
+      <div class="ddcell">
+        <div class="hd"><b>拼接方式</b><span class="pge">视频拼接</span></div>
+        <div class="ddclose"><span>快速流复制（推荐）</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">快速流复制</span><span class="hint">编码一致时推荐</span></div>
+          <div class="dditem"><span class="lb">精确重编码</span><span class="hint">统一编码</span></div>
+        </div>
+      </div>
+
+      <!-- 8 转换 · 目标格式 -->
+      <div class="ddcell">
+        <div class="hd"><b>目标格式</b><span class="pge">格式转换</span></div>
+        <div class="ddclose"><span>MP4（H.264/H.265）</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">MP4（H.264/H.265）</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">WebM（VP8）</span><span class="hint">网页友好</span></div>
+          <div class="dditem"><span class="lb">MKV</span><span class="hint">多音轨/字幕</span></div>
+        </div>
+      </div>
+
+      <!-- 9 转换 · 分辨率 -->
+      <div class="ddcell">
+        <div class="hd"><b>分辨率</b><span class="pge">格式转换</span></div>
+        <div class="ddclose"><span>保持原尺寸</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">保持原尺寸</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">1920x1080</span></div>
+          <div class="dditem"><span class="lb">1280x720</span></div>
+          <div class="dditem"><span class="lb">854x480</span></div>
+          <div class="dditem"><span class="lb">640x360</span></div>
+          <div class="ddsep"></div>
+          <div class="dditem hot"><span class="lb">自定义</span><span class="hint">手动输入</span></div>
+        </div>
+      </div>
+
+      <!-- 10 转换 · 音频 -->
+      <div class="ddcell">
+        <div class="hd"><b>音频</b><span class="pge">格式转换</span></div>
+        <div class="ddclose"><span>保留（重编码）</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">保留（重编码）</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">去掉音频</span><span class="hint">-an</span></div>
+        </div>
+        <div class="desc" style="font-size:11px;color:#8b93ab;margin-top:9px;line-height:1.55">
+          勾选「仅提取音频」时本项禁用。
+        </div>
+      </div>
+
+      <!-- 11 整理 · 操作类型 -->
+      <div class="ddcell">
+        <div class="hd"><b>操作类型</b><span class="pge">文件整理</span></div>
+        <div class="ddclose"><span>组合命名模板</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem"><span class="lb">查找替换</span></div>
+          <div class="dditem on"><span class="lb">组合命名模板</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">删除字符</span></div>
+          <div class="dditem"><span class="lb">转换</span><span class="hint">大小写/符号</span></div>
+          <div class="dditem"><span class="lb">设置扩展名</span></div>
+        </div>
+        <div class="desc" style="font-size:11px;color:#8b93ab;margin-top:9px;line-height:1.55">
+          切换后下方规则配置区随之切换。
+        </div>
+      </div>
+
+      <!-- 12 整理 · 转换方式 -->
+      <div class="ddcell">
+        <div class="hd"><b>转换方式</b><span class="pge">文件整理 · 转换</span></div>
+        <div class="ddclose"><span>改为小写 (abc)</span><span class="arrow">▾</span></div>
+        <div class="ddopen focus">
+          <div class="dditem on"><span class="lb">改为小写 (abc)</span><span class="ck">✓</span></div>
+          <div class="dditem"><span class="lb">改为大写 (ABC)</span></div>
+          <div class="dditem"><span class="lb">改为标题式大写</span></div>
+          <div class="dditem"><span class="lb">改为首字母大写 (Abc)</span></div>
+          <div class="ddsep"></div>
+          <div class="dditem"><span class="lb">移除特殊符号</span><span class="hint">äé→ae</span></div>
+          <div class="dditem"><span class="lb">URL 解码</span><span class="hint">a%20b→a b</span></div>
+        </div>
+      </div>
+
+      <!-- 13 状态演示 -->
+      <div class="ddcell" style="background:#fbfcff">
+        <div class="hd"><b>四种状态对照</b><span class="pge">规范</span></div>
+        <div class="ddopen" style="margin-top:0">
+          <div class="dditem on"><span class="lb">当前值</span><span class="hint">蓝底白字</span></div>
+          <div class="dditem hot"><span class="lb">鼠标悬停</span><span class="hint">浅蓝底</span></div>
+          <div class="dditem"><span class="lb">普通项</span><span class="hint">白底</span></div>
+          <div class="dditem dis"><span class="lb">禁用项</span><span class="hint">灰字不可点</span></div>
+        </div>
+        <div class="desc" style="font-size:11px;color:#8b93ab;margin-top:9px;line-height:1.55">
+          展开层宽度 ≥ 触发器；选项过长时省略号截断，完整文案进 tooltip。
+        </div>
+      </div>
+
+    </div>
+
+    <div class="notes" style="margin-top:18px">
+      <h3><i></i>下拉设计规范（本轮统一）</h3>
+      <ol>
+        <li><b>触发器</b>：白底 + 1px #d3dae8 描边 + 9px 圆角，展开时描边转主色并加 3px 浅色外发光（现有控件已有，仅补聚焦态）。</li>
+        <li><b>展开层</b>：与触发器同宽的浮层，白底、9px 圆角、1px 描边，加「0 12px 30px -10px」浮起阴影，内边距 5px 4px。</li>
+        <li><b>选项行</b>：12.5px、左右 10px、上下 7px、6px 圆角；当前值蓝底白字，悬停浅蓝底，禁用灰字。</li>
+        <li><b>右侧辅助信息</b>：分辨率加 1080p/720p、格式加用途、转换方式加示例，用 10.5px 灰字右对齐，不干扰主文案。</li>
+        <li><b>分组与长列表</b>：预设与「自定义」之间加分隔线；超过 8 项时展开层最高 280px 并出现滚动条，底部做渐隐。</li>
+        <li><b>宽度</b>：展开层宽度取「触发器宽度」与「最长选项宽度」的较大值，避免长选项被截断。</li>
+        <li><b>键盘</b>：支持 ↑↓ 移动、Enter 确认、Esc 关闭（Qt 原生行为，样式不改）。</li>
+        <li><b>联动置灰</b>：拼接页流复制模式、转换页仅提取音频等场景，相关下拉保持可见但禁用（灰字），并附一行原因说明。</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+</div><!-- /stage -->
+<script>
+document.querySelectorAll('.tabs button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('.tabs button').forEach(function(x){ x.classList.remove('on'); });
+    document.querySelectorAll('.view').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    var v = document.getElementById(b.dataset.v);
+    if (v) v.classList.add('on');
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+});
+</script>
+</body>
+</html>

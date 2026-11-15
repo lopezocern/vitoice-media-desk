@@ -10,8 +10,8 @@ from pathlib import Path
 from PySide6.QtCore import QRect, QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QLayout, QLineEdit, QMessageBox, QPushButton, QRadioButton, QScrollArea,
-    QSpinBox, QStackedWidget, QVBoxLayout, QWidget, QWidgetItem,
+    QLayout, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QRadioButton,
+    QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QWidget, QWidgetItem,
 )
 
 from ..renamer import (
@@ -41,7 +41,7 @@ class _VarButton(QPushButton):
 
     def _insert(self) -> None:
         cur = self._target
-        cur.insert(self._value)
+        cur.insertPlainText(self._value)
         cur.setFocus()
 
 
@@ -238,7 +238,7 @@ class RenamePage(QWidget):
         lv.addWidget(self.clean_btn)
         lv.addStretch(1)
         # 左栏固定到适度宽度，把更多空间留给右侧预览表（文件整理核心在核对结果）
-        left.setMaximumWidth(360)
+        left.setMaximumWidth(400)
         body.addWidget(left, 0)
 
         # --- 右：文件预览表 ---
@@ -346,13 +346,17 @@ class RenamePage(QWidget):
         preset = QPushButton("拼音前缀")
         preset.setObjectName("Ghost")
         preset.setCursor(Qt.CursorShape.PointingHandCursor)
-        preset.clicked.connect(lambda: self.template_input.setText("${pinyin_prefix}"))
+        preset.clicked.connect(lambda: self.template_input.setPlainText("${pinyin_prefix}"))
         hl.addStretch(1)
         hl.addWidget(preset)
         lay.addLayout(hl)
 
-        self.template_input = QLineEdit()
+        self.template_input = QPlainTextEdit()
         self.template_input.setPlaceholderText("如 ${create_time:yyyy-MM-dd}_${seq:start=1;increment=1;padding=3}")
+        # 模板可能很长：多行显示避免被单行输入框截断成「…」
+        self.template_input.setFixedHeight(58)
+        self.template_input.setStyleSheet(
+            'font-family:Consolas,"Microsoft YaHei UI",monospace;font-size:12px;')
         self.template_input.textChanged.connect(self._schedule_refresh)
         lay.addWidget(self.template_input)
         lay.addWidget(HelpLabel("点下方按钮把变量插到光标处；普通文字可混写。"))
@@ -364,29 +368,37 @@ class RenamePage(QWidget):
 
         # 文件信息
         lay.addWidget(_group("文件信息"))
-        _fi = _FlowLayout(6)
+        # 变量按钮改用普通水平布局：自定义流式布局在窄栏下高度算成 0，
+        # 只留下分组标题悬空（截图可见），这里改为一行排布 + 右侧留白。
+        _fi = QHBoxLayout()
+        _fi.setSpacing(6)
         _fi.addWidget(_VarButton("原名称", "${original}", self.template_input, "原文件名（不含扩展名）"))
         _fi.addWidget(_VarButton("文件夹", "${folder}", self.template_input, "文件所在文件夹名"))
+        _fi.addStretch(1)
         lay.addLayout(_fi)
 
         # 时间
         lay.addWidget(_group("时间"))
-        _tm = _FlowLayout(6)
+        _tm = QHBoxLayout()
+        _tm.setSpacing(6)
         _db = QPushButton("创建 / 修改时间")
         _db.setObjectName("Ghost")
         _db.setCursor(Qt.CursorShape.PointingHandCursor)
         _db.setToolTip("选择时间源（创建 / 修改）与格式后插入")
         _db.clicked.connect(self._open_datetime)
         _tm.addWidget(_db)
+        _tm.addStretch(1)
         lay.addLayout(_tm)
 
         # 序号 / 随机
         lay.addWidget(_group("序号 / 随机"))
-        _sr = _FlowLayout(6)
+        _sr = QHBoxLayout()
+        _sr.setSpacing(6)
         _sr.addWidget(_VarButton("序列号", "${seq:start=1;increment=1;padding=3}",
                                  self.template_input, "自动递增序号，可设起始 / 增量 / 补零"))
         _sr.addWidget(_VarButton("随机串", "${random:6}", self.template_input, "N 位随机字符串"))
         _sr.addWidget(_VarButton("UUID", "${uuid}", self.template_input, "随机 UUID"))
+        _sr.addStretch(1)
         lay.addLayout(_sr)
 
         lay.addStretch(1)
@@ -396,7 +408,7 @@ class RenamePage(QWidget):
     def _open_datetime(self) -> None:
         dlg = _DateTimeDialog(self)
         if dlg.exec() and dlg.selected:
-            self.template_input.insert(dlg.selected)
+            self.template_input.insertPlainText(dlg.selected)
             self.template_input.setFocus()
 
     def _cfg_delete(self) -> QWidget:
@@ -473,7 +485,7 @@ class RenamePage(QWidget):
                 self.regex_chk.isChecked(), self.ignore_chk.isChecked(),
                 self.all_chk.isChecked())
         elif op == Operation.TEMPLATE:
-            r.template = self.template_input.text()
+            r.template = self.template_input.toPlainText()
         elif op == Operation.DELETE_CHARS:
             r.start, r.count = self.start_spin.value(), self.count_spin.value()
             r.from_end = self.from_end_radio.isChecked()

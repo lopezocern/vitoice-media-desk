@@ -12,20 +12,18 @@ from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QProgressBar, QPushButton, QScrollArea,
-    QSpinBox, QToolButton, QVBoxLayout, QWidget,
+    QSlider, QSpinBox, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .. import state
-from ..config import AppConfig
+from ..config import CRF_BY_SPEED, PRESET_BY_SPEED, AppConfig
 from ..task import CANCELLED, RUNNING, SUCCESS, ConcatTask, TaskPool
-from .compression import VIDEO_EXTS, human_size
+from .compression import VIDEO_EXTS, _crf_tag, human_size
 from .widgets import (
     DropBox, HelpLabel, OutputDirRow, Segmented, _COLOR_RUN, _COLOR_OK,
     _COLOR_ERR, _COLOR_WAIT, form_label, page_head, section_title,
+    set_combo_items,
 )
-
-_PRESET_BY_SPEED = {"balanced": "medium", "fast": "fast", "ultrafast": "ultrafast"}
-_CRF_BY_SPEED = {"balanced": 18, "fast": 20, "ultrafast": 23}
 
 
 class ConcatRow(QWidget):
@@ -118,7 +116,7 @@ class ConcatPage(QWidget):
         self.listarea = QScrollArea()
         self.listarea.setWidgetResizable(True)
         self.listarea.setObjectName("TaskList")
-        self.listarea.setMinimumHeight(240)
+        self.listarea.setMinimumHeight(176)
         self.listcontainer = QWidget()
         self.listlay = QVBoxLayout(self.listcontainer)
         self.listlay.setContentsMargins(0, 0, 0, 0)
@@ -136,70 +134,132 @@ class ConcatPage(QWidget):
 
         card = QFrame()
         card.setObjectName("SettingCard")
-        form = QFormLayout(card)
-        form.setContentsMargins(16, 14, 16, 14)
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(10)
+        cardv = QVBoxLayout(card)
+        cardv.setContentsMargins(16, 14, 16, 14)
+        cardv.setSpacing(12)
+        cols = QHBoxLayout()
+        cols.setContentsMargins(0, 0, 0, 0)
+        cols.setSpacing(22)
+
+        def _col_form() -> QFormLayout:
+            """两列参数区共用的紧凑表单：标签右对齐，左右两列可目视对齐。"""
+            f = QFormLayout()
+            f.setContentsMargins(0, 0, 0, 0)
+            f.setHorizontalSpacing(10)
+            f.setVerticalSpacing(10)
+            f.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            return f
+
+        left = QVBoxLayout()
+        left.setSpacing(10)
+        right = QVBoxLayout()
+        right.setSpacing(10)
+        form = _col_form()
+        rform = _col_form()
 
         f_mode = QHBoxLayout()
         f_mode.setSpacing(6)
         self.mode = QComboBox()
-        self.mode.addItem("快速流复制（推荐，编码一致时）", "copy")
-        self.mode.addItem("精确重编码（统一编码）", "reencode")
+        set_combo_items(self.mode, [
+            ("快速流复制", "copy", "编码一致时推荐"),
+            ("精确重编码", "reencode", "统一编码"),
+        ])
         self.mode.currentIndexChanged.connect(self._on_mode_changed)
         f_mode.addWidget(self.mode)
+        f_mode.addWidget(HelpLabel("流复制要求各段编码参数一致；不一致时请选精确重编码。"))
         f_mode.addStretch(1)
         form.addRow(form_label("拼接方式"), f_mode)
 
-        f_speed = QHBoxLayout()
-        f_speed.setSpacing(6)
+        # 四档位：与压缩页同一体系（从慢到快），切档时 CRF 联动到该档默认值
         self.speed = Segmented([
-            ("超快", "ultrafast"),
-            ("平衡", "balanced"),
+            ("极致画质", "best"),
+            ("高画质", "high"),
+            ("均衡", "standard"),
             ("快速", "fast"),
         ])
-        self.speed.setCurrentData("fast")
         self.speed.currentChanged.connect(self._on_speed_changed)
+        f_speed = QHBoxLayout()
+        f_speed.setSpacing(6)
         f_speed.addWidget(self.speed)
-        f_speed.addWidget(HelpLabel("仅重编码时生效。"))
         f_speed.addStretch(1)
         form.addRow(form_label("重编码速度"), f_speed)
 
-        f_crf = QHBoxLayout()
-        f_crf.setSpacing(6)
-        self.crf = QSpinBox()
+        # CRF 滑杆（与压缩页控件形态一致；保留 self.crf 名称，取值接口不变）
+        self.crf_zone = QWidget()
+        cz = QHBoxLayout(self.crf_zone)
+        cz.setContentsMargins(0, 0, 0, 0)
+        cz.setSpacing(10)
+        self.crf = QSlider(Qt.Orientation.Horizontal)
+        self.crf.setObjectName("ParamSlider")
         self.crf.setRange(0, 51)
-        self.crf.setValue(int(AppConfig.instance().get_concat("crf") or 20))
-        f_crf.addWidget(self.crf)
-        f_crf.addWidget(HelpLabel("数值越低越清晰、文件越大。仅重编码时生效。"))
-        f_crf.addStretch(1)
-        form.addRow(form_label("CRF（画质）"), f_crf)
+        self.crf.setValue(20)
+        self.crf.valueChanged.connect(self._on_crf_changed)
+        cz.addWidget(self.crf, 1)
+        self.crf_val = QLabel("20")
+        self.crf_val.setObjectName("RangeVal")
+        cz.addWidget(self.crf_val)
+        rform.addRow(form_label("CRF 画质"), self.crf_zone)
 
         f_suffix = QHBoxLayout()
         f_suffix.setSpacing(6)
         self.suffix = QLineEdit(AppConfig.instance().get_concat("suffix"))
-        f_suffix.addWidget(self.suffix)
-        f_suffix.addStretch(1)
-        form.addRow(form_label("输出命名后缀"), f_suffix)
+        f_suffix.addWidget(self.suffix, 1)
+        rform.addRow(form_label("输出命名后缀"), f_suffix)
 
-        f_od = QHBoxLayout()
-        f_od.setSpacing(8)
+        self.crf_tag = QLabel(_crf_tag(20))
+        self.crf_tag.setStyleSheet("color:#8b93ab;font-size:11px;")
+        # 流复制模式下速度/CRF 不可调，给一行原因，避免误以为控件坏了
+        self.mode_hint = QLabel("")
+        self.mode_hint.setStyleSheet("color:#8b93ab;font-size:11px;")
+        self.mode_hint.setWordWrap(True)
+        right.addLayout(rform)
+        right.addWidget(self.crf_tag)
+        right.addWidget(self.mode_hint)
+        right.addStretch(1)
+
+        left.addLayout(form)
+        left.addStretch(1)
+        cols.addLayout(left, 1)
+        cols.addLayout(right, 1)
+        cardv.addLayout(cols)
+
         self.od = OutputDirRow()
-        f_od.addWidget(self.od)
-        form.addRow(form_label("输出目录"), f_od)
+        od_row = QHBoxLayout()
+        od_row.setSpacing(10)
+        od_row.addWidget(form_label("输出目录"))
+        od_row.addWidget(self.od, 1)
+        cardv.addLayout(od_row)
         blay.addWidget(card)
+
+        # 先按档位联动，再用配置里的 CRF 覆盖，避免持久化的自定义值被默认值冲掉
+        self.speed.setCurrentData("high")
+        self.crf.setValue(int(AppConfig.instance().get_concat("crf") or 20))
         self._on_mode_changed()  # 初始同步 speed/crf 可用态（默认 copy 时禁用）
 
         self.scroll.setWidget(body)
         self.scroll.viewport().installEventFilter(self)
         outer.addWidget(self.scroll, 1)
 
-        # 底部操作（设计稿 .footer-actions：左提示/统计 + 右按钮组）
+        # 底部操作（设计稿 .footer-actions：左统计 + 进度 + 右按钮组）
         actions = QHBoxLayout()
         actions.setSpacing(8)
         self.summary = QLabel("0 个文件，待添加")
         self.summary.setObjectName("Summary")
         actions.addWidget(self.summary)
+        actions.addSpacing(10)
+
+        # 拼接为单个作业：进度条并入操作栏，不再单独占底部一整行
+        self.bar = QProgressBar()
+        self.bar.setObjectName("TaskBar")
+        self.bar.setRange(0, 100)
+        self.bar.setValue(0)
+        self.bar.setFixedHeight(8)
+        self.bar.setTextVisible(True)
+        self.bar.setMaximumWidth(220)
+        actions.addWidget(self.bar)
+        self.status_lbl = QLabel("就绪")
+        self.status_lbl.setObjectName("TaskMeta")
+        actions.addWidget(self.status_lbl)
         actions.addStretch(1)
         self.stop_btn = QPushButton("停止")
         self.stop_btn.setObjectName("Ghost")
@@ -218,20 +278,6 @@ class ConcatPage(QWidget):
         actions.addWidget(self.add_btn)
         actions.addWidget(self.start_btn)
         outer.addLayout(actions)
-
-        # 全局进度（拼接为单个作业）
-        prog = QHBoxLayout()
-        self.bar = QProgressBar()
-        self.bar.setObjectName("TaskBar")
-        self.bar.setRange(0, 100)
-        self.bar.setValue(0)
-        self.bar.setFixedHeight(10)
-        self.bar.setTextVisible(True)
-        self.status_lbl = QLabel("就绪")
-        self.status_lbl.setObjectName("TaskMeta")
-        prog.addWidget(self.bar, 1)
-        prog.addWidget(self.status_lbl, 0)
-        outer.addLayout(prog)
 
     # ---------------- 拖拽（页面滚动后，拖拽事件由 viewport 接收） ----------------
     def eventFilter(self, obj, ev) -> bool:
@@ -252,10 +298,18 @@ class ConcatPage(QWidget):
     def _on_mode_changed(self) -> None:
         reenc = self.mode.currentData() == "reencode"
         self.speed.setEnabled(reenc)
-        self.crf.setEnabled(reenc)
+        self.crf_zone.setEnabled(reenc)
+        self.mode_hint.setText(
+            "" if reenc else
+            "当前为快速流复制：不重新编码，因此速度与 CRF 不可调；需要调整请切换到「精确重编码」。")
 
     def _on_speed_changed(self, *_args) -> None:
-        self.crf.setValue(_CRF_BY_SPEED.get(self.speed.currentData(), 20))
+        # 档位=预设包：未手动调整前，CRF 跟随档位默认值
+        self.crf.setValue(CRF_BY_SPEED.get(self.speed.currentData(), 20))
+
+    def _on_crf_changed(self, v: int) -> None:
+        self.crf_val.setText(str(v))
+        self.crf_tag.setText(_crf_tag(v))
 
     def _pick_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
@@ -351,7 +405,7 @@ class ConcatPage(QWidget):
             "mode": mode,
             "encoder": enc,
             "crf": self.crf.value(),
-            "preset": _PRESET_BY_SPEED[self.speed.currentData()],
+            "preset": PRESET_BY_SPEED[self.speed.currentData()],
             "suffix": self.suffix.text().strip() or "_concat",
         }
         cfg.update_section("concat", {   # 批量一次落盘

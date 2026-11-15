@@ -23,6 +23,8 @@ _CHECK = f"QCheckBox::indicator:checked{{background:#4f5bd5;border-color:#4f5bd5
 QSS = """
 *{font-family:"Microsoft YaHei UI","Segoe UI",sans-serif;outline:none;}
 QMainWindow,QWidget#Root{background:#eef1f8;color:#1c2333;}
+/* 内容区底色：白卡片靠这层浅灰底撑出边界，否则总览卡片与背景同色看不出层次 */
+QStackedWidget#ContentArea{background:#eef1f8;}
 
 /* ---- 顶部标题栏 ---- */
 QWidget#TitleBar{background:#ffffff;border-bottom:1px solid #e4e9f2;}
@@ -52,7 +54,7 @@ QLabel#PageSub{font-size:12.5px;color:#64748b;}
 QLabel#SectionTitle{font-size:13px;font-weight:700;color:#3a4256;}
 QFrame#OverviewCard,QFrame#SettingCard{background:#ffffff;border:1px solid #e4e9f2;border-radius:12px;}
 QScrollArea#TaskList{background:#ffffff;border:1px solid #e4e9f2;border-radius:12px;}
-QFrame#ModuleCard{background:#ffffff;border:1px solid #e4e9f2;border-radius:12px;}
+QFrame#ModuleCard{background:#ffffff;border:1px solid #ccd5e8;border-radius:12px;}
 QFrame#ModuleCard:hover{border:1px solid #4f5bd5;background:#fbfcff;}
 QFrame#ModuleCard:pressed{background:#eef0fe;}
 QLabel#ValueAccent{color:#4f5bd5;font-weight:600;}
@@ -79,9 +81,9 @@ QPushButton#Primary:pressed{background:#3943b3;}
 QPushButton#Primary:disabled{background:#b9bfdf;color:#eef1f8;}
 QPushButton#Ghost{background:#ffffff;color:#3a4256;border:1px solid #d3dae8;border-radius:9px;padding:7px 14px;}
 QPushButton#Ghost:hover{border-color:#4f5bd5;color:#4f5bd5;background:#f6f7fe;}
-QComboBox,QSpinBox,QLineEdit{background:#ffffff;border:1px solid #d3dae8;border-radius:9px;padding:6px 11px;font-size:13px;color:#1c2333;}
-QComboBox:hover,QSpinBox:hover,QLineEdit:hover{border-color:#aeb7d8;}
-QComboBox:focus,QSpinBox:focus,QLineEdit:focus{border-color:#4f5bd5;}
+QComboBox,QSpinBox,QLineEdit,QPlainTextEdit{background:#ffffff;border:1px solid #d3dae8;border-radius:9px;padding:6px 11px;font-size:13px;color:#1c2333;}
+QComboBox:hover,QSpinBox:hover,QLineEdit:hover,QPlainTextEdit:hover{border-color:#aeb7d8;}
+QComboBox:focus,QSpinBox:focus,QLineEdit:focus,QPlainTextEdit:focus{border-color:#4f5bd5;}
 /* 切割时间段弹窗：段行卡片 / 紧凑时间栏 / 无效段红框 */
 QWidget#SegCard{background:#fbfcff;border:1px solid #e6eaf3;border-radius:10px;}
 QFrame#PresetInfo{background:#f3f5fd;border:1px solid #e3e7f5;border-radius:9px;}
@@ -116,12 +118,11 @@ QScrollBar::handle:vertical:hover{background:#aab3cc;}
 QScrollBar::add-line,QScrollBar::sub-line{height:0;}
 QMessageBox QLabel{font-size:13px;}
 
-/* ---- 下拉框弹层 ---- */
+/* ---- 下拉框弹层：选项由 HintItemDelegate 自绘（含右侧说明与对勾） ---- */
+QComboBox:on{border-color:#4f5bd5;}
 QComboBox QAbstractItemView{background:#ffffff;border:1px solid #d3dae8;border-radius:9px;
-  outline:none;selection-background-color:#eef0fe;selection-color:#4f5bd5;}
-QComboBox QAbstractItemView::item{padding:8px 12px;color:#1c2333;border-radius:6px;font-size:13px;min-height:20px;}
-QComboBox QAbstractItemView::item:hover{background:#eef0fe;color:#4f5bd5;}
-QComboBox QAbstractItemView::item:selected{background:#4f5bd5;color:#ffffff;font-weight:600;}
+  outline:none;padding:5px 4px;}
+QComboBox QAbstractItemView::item{padding:0;border:none;background:transparent;min-height:0;}
 QComboBox::drop-down{border:none;background:transparent;width:22px;}
 
 /* ---- SpinBox 上下按钮（箭头走 Qt 默认绘制，QSS border 三角不支持） ---- */

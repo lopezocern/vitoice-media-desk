@@ -20,12 +20,8 @@ from ..task import CANCELLED, RUNNING, SUCCESS, ConvertTask, TaskPool
 from .compression import VIDEO_EXTS, human_size
 from .widgets import (
     DropBox, HelpLabel, OutputDirRow, Segmented, TaskRow, form_label,
-    page_head, section_title,
+    page_head, section_title, set_combo_items,
 )
-
-_RES_LABELS = [("保持原尺寸", "keep"), ("1920x1080", "1920x1080"),
-               ("1280x720", "1280x720"), ("854x480", "854x480"),
-               ("640x360", "640x360"), ("自定义", "custom")]
 
 
 class ConvertPage(QWidget):
@@ -75,7 +71,7 @@ class ConvertPage(QWidget):
         self.listarea = QScrollArea()
         self.listarea.setWidgetResizable(True)
         self.listarea.setObjectName("TaskList")
-        self.listarea.setMinimumHeight(240)
+        self.listarea.setMinimumHeight(176)
         self.listcontainer = QWidget()
         self.listlay = QVBoxLayout(self.listcontainer)
         self.listlay.setContentsMargins(0, 0, 0, 0)
@@ -93,28 +89,37 @@ class ConvertPage(QWidget):
 
         card = QFrame()
         card.setObjectName("SettingCard")
-        form = QFormLayout(card)
-        form.setContentsMargins(16, 14, 16, 14)
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(10)
+        cardv = QVBoxLayout(card)
+        cardv.setContentsMargins(16, 14, 16, 14)
+        cardv.setSpacing(12)
+        cols = QHBoxLayout()
+        cols.setContentsMargins(0, 0, 0, 0)
+        cols.setSpacing(22)
 
-        # 操作类型：转换 / 提取音频（影响下方所有参数）
-        f_audio_only = QHBoxLayout()
-        f_audio_only.setSpacing(6)
-        self.audio_only = QCheckBox("仅提取音频（转为 m4a，不转视频）")
-        self.audio_only.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.audio_only.toggled.connect(self._on_audio_only_toggled)
-        f_audio_only.addWidget(self.audio_only)
-        f_audio_only.addWidget(HelpLabel("勾选后仅抽取音轨为 .m4a，下面的容器/画质/分辨率/GPU 均不生效。"))
-        f_audio_only.addStretch(1)
-        form.addRow(f_audio_only)
+        def _col_form() -> QFormLayout:
+            """两列参数区共用的紧凑表单：标签右对齐，左右两列可目视对齐。"""
+            f = QFormLayout()
+            f.setContentsMargins(0, 0, 0, 0)
+            f.setHorizontalSpacing(10)
+            f.setVerticalSpacing(10)
+            f.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            return f
+
+        left = QVBoxLayout()
+        left.setSpacing(10)
+        right = QVBoxLayout()
+        right.setSpacing(10)
+        form = _col_form()
+        rform = _col_form()
 
         f_fmt = QHBoxLayout()
         f_fmt.setSpacing(6)
         self.fmt = QComboBox()
-        self.fmt.addItem("MP4（H.264/H.265）", "mp4")
-        self.fmt.addItem("WebM（VP8）", "webm")
-        self.fmt.addItem("MKV", "mkv")
+        set_combo_items(self.fmt, [
+            ("MP4（H.264/H.265）", "mp4", "通用"),
+            ("WebM（VP8）", "webm", "网页友好"),
+            ("MKV", "mkv", "多音轨/字幕"),
+        ])
         self.fmt.currentIndexChanged.connect(self._on_fmt_changed)
         f_fmt.addWidget(self.fmt)
         f_fmt.addStretch(1)
@@ -124,25 +129,33 @@ class ConvertPage(QWidget):
         f_quality.setSpacing(6)
         self.quality = Segmented([
             ("高画质", "high"),
-            ("平衡", "balance"),
-            ("低体积", "small"),
+            ("均衡", "balance"),
+            ("小体积", "small"),
         ])
         self.quality.setCurrentData("balance")
         f_quality.addWidget(self.quality)
+        f_quality.addWidget(HelpLabel("高画质 / 均衡 / 小体积：预设的 CRF 与码率，越高越清晰、体积越大。"))
         f_quality.addStretch(1)
-        form.addRow(form_label("画质"), f_quality)
+        form.addRow(form_label("画质档位"), f_quality)
 
         f_res = QHBoxLayout()
         f_res.setSpacing(6)
         self.res = QComboBox()
-        for label, key in _RES_LABELS:
-            self.res.addItem(label, key)
+        set_combo_items(self.res, [
+            ("保持原尺寸", "keep", "推荐"),
+            ("1920x1080", "1920x1080", "1080p"),
+            ("1280x720", "1280x720", "720p"),
+            ("854x480", "854x480", "480p"),
+            ("640x360", "640x360", "360p"),
+            ("自定义", "custom", "手动输入"),
+        ])
         self.res.currentIndexChanged.connect(self._on_res_changed)
         f_res.addWidget(self.res)
         self.custom_res = QLineEdit()
         self.custom_res.setPlaceholderText("如 1600x900")
-        self.custom_res.setEnabled(False)
-        self.custom_res.setFixedWidth(120)
+        self.custom_res.setFixedWidth(110)
+        # 仅「自定义」时显示：原先一直显示可输入框，与「保持原尺寸」自相矛盾
+        self.custom_res.setVisible(False)
         f_res.addWidget(self.custom_res)
         f_res.addStretch(1)
         form.addRow(form_label("分辨率"), f_res)
@@ -150,11 +163,13 @@ class ConvertPage(QWidget):
         f_audio = QHBoxLayout()
         f_audio.setSpacing(6)
         self.audio = QComboBox()
-        self.audio.addItem("保留（重编码）", "keep")
-        self.audio.addItem("去掉音频", "none")
+        set_combo_items(self.audio, [
+            ("保留（重编码）", "keep", ""),
+            ("去掉音频", "none", "-an"),
+        ])
         f_audio.addWidget(self.audio)
         f_audio.addStretch(1)
-        form.addRow(form_label("音频"), f_audio)
+        rform.addRow(form_label("音频"), f_audio)
 
         f_gpu = QHBoxLayout()
         f_gpu.setSpacing(6)
@@ -163,20 +178,38 @@ class ConvertPage(QWidget):
         self.gpu.setCursor(Qt.CursorShape.PointingHandCursor)
         self.gpu.toggled.connect(self._on_gpu_toggled)
         f_gpu.addWidget(self.gpu)
-        f_gpu.addWidget(HelpLabel("仅 mp4/mkv 可开（hevc_nvenc）；webm 固定软件编码。需机器有可用的 NVIDIA 编码。"))
-        f_gpu.addSpacing(4)
         self.enc_pill = QLabel("")
         self.enc_pill.setObjectName("Pill")
         self.enc_pill.setProperty("soft", "true")
         f_gpu.addWidget(self.enc_pill)
+        f_gpu.addWidget(HelpLabel("仅 mp4/mkv 可开（hevc_nvenc）；webm 固定软件编码。需机器有可用 NVIDIA 编码。"))
         f_gpu.addStretch(1)
-        form.addRow(form_label("硬件加速"), f_gpu)
+        rform.addRow(form_label("硬件加速"), f_gpu)
 
-        f_od = QHBoxLayout()
-        f_od.setSpacing(8)
+        self.audio_only = QCheckBox("仅提取音频（转为 m4a，不转视频）")
+        self.audio_only.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.audio_only.toggled.connect(self._on_audio_only_toggled)
+        ao = QHBoxLayout()
+        ao.setSpacing(6)
+        ao.addWidget(self.audio_only)
+        ao.addWidget(HelpLabel("勾选后仅抽取音轨为 .m4a，容器 / 画质 / 分辨率 / GPU 均不生效。"))
+        ao.addStretch(1)
+        rform.addRow(form_label("操作类型"), ao)
+
+        left.addLayout(form)
+        left.addStretch(1)
+        right.addLayout(rform)
+        right.addStretch(1)
+        cols.addLayout(left, 1)
+        cols.addLayout(right, 1)
+        cardv.addLayout(cols)
+
         self.od = OutputDirRow()
-        f_od.addWidget(self.od)
-        form.addRow(form_label("输出目录"), f_od)
+        od_row = QHBoxLayout()
+        od_row.setSpacing(10)
+        od_row.addWidget(form_label("输出目录"))
+        od_row.addWidget(self.od, 1)
+        cardv.addLayout(od_row)
         blay.addWidget(card)
 
         self.scroll.setWidget(body)
@@ -264,7 +297,8 @@ class ConvertPage(QWidget):
         self.gpu.setEnabled(fmt in ("mp4", "mkv"))
 
     def _on_res_changed(self) -> None:
-        self.custom_res.setEnabled(self.res.currentData() == "custom")
+        # 非「自定义」时整块隐藏输入框，避免出现与「保持原尺寸」矛盾的空白框
+        self.custom_res.setVisible(self.res.currentData() == "custom")
 
     def _pick_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(

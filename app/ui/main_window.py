@@ -273,11 +273,15 @@ class SettingsPage(QWidget):
         self.ff_resolved = QLabel("当前使用：检测中…")
         self.ff_resolved.setObjectName("ValueAccent")
         lay.addWidget(self.ff_resolved)
+        detect_row = QHBoxLayout()
+        detect_row.addStretch(1)
         detect = QPushButton("重新检测环境")
         detect.setObjectName("Ghost")
+        detect.setCursor(Qt.CursorShape.PointingHandCursor)
         detect.clicked.connect(self._redetect)
-        lay.addWidget(detect)
-        outer.addWidget(card)
+        detect_row.addWidget(detect)
+        lay.addLayout(detect_row)
+        c_ff = card
 
         # GPU
         lay, card = self._make_card("硬件加速", "开关只决定“是否用硬编”；前提是当前 FFmpeg 含 NVENC 且机器有 NVIDIA 显卡。")
@@ -288,7 +292,7 @@ class SettingsPage(QWidget):
         self.gpu_status = QLabel("检测中…")
         self.gpu_status.setWordWrap(True)
         lay.addWidget(self.gpu_status)
-        outer.addWidget(card)
+        c_gpu = card
         state.state.env_changed.connect(self._refresh_env_info)
         self._refresh_env_info()
 
@@ -301,7 +305,7 @@ class SettingsPage(QWidget):
         self.od.custom_changed.connect(
             lambda d: AppConfig.instance().set("output_dir_custom", d))
         lay.addWidget(self.od)
-        outer.addWidget(card)
+        c_od = card
 
         # 并发
         lay, card = self._make_card("默认同时压缩（路）", "0 表示自动（min 4, CPU核）。")
@@ -311,9 +315,10 @@ class SettingsPage(QWidget):
         self.conc.setValue(cfg.get_compress("concurrency") or 0)
         self.conc.valueChanged.connect(self._on_conc)
         row.addWidget(self.conc)
+        row.addWidget(QLabel("0 = 自动（min(4, CPU 核数)）"))
         row.addStretch(1)
         lay.addLayout(row)
-        outer.addWidget(card)
+        c_conc = card
 
         # 任务通知
         lay, card = self._make_card(
@@ -323,7 +328,24 @@ class SettingsPage(QWidget):
         self.notify.toggled.connect(
             lambda v: AppConfig.instance().set_ui("notify_on_finish", bool(v)))
         lay.addWidget(self.notify)
-        outer.addWidget(card)
+        c_notify = card
+
+        # 两列卡片：左列路径与硬件、右列输出与任务，一屏放下且不留右侧空白
+        col_l = QVBoxLayout()
+        col_l.setSpacing(14)
+        col_r = QVBoxLayout()
+        col_r.setSpacing(14)
+        for w in (c_ff, c_gpu):
+            col_l.addWidget(w)
+        col_l.addStretch(1)
+        for w in (c_od, c_conc, c_notify):
+            col_r.addWidget(w)
+        col_r.addStretch(1)
+        cols = QHBoxLayout()
+        cols.setSpacing(14)
+        cols.addLayout(col_l, 1)
+        cols.addLayout(col_r, 1)
+        outer.addLayout(cols)
         outer.addStretch(1)
 
     def _refresh_env_info(self) -> None:

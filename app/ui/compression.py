@@ -18,8 +18,8 @@ from .. import env as appenv, state
 from ..config import AppConfig
 from ..task import CANCELLED, RUNNING, SUCCESS, CompressionTask, TaskPool
 from .widgets import (
-    DropBox, HelpLabel, OutputDirRow, Segmented, TaskRow, form_label,
-    page_head, section_title,
+    DropBox, HelpLabel, OutputDirRow, Segmented, TaskRow, bind_hint_combo,
+    form_label, page_head, section_title, set_combo_items,
 )
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".m4v", ".flv"}
@@ -162,7 +162,7 @@ class CompressionPage(QWidget):
         self.listarea = QScrollArea()
         self.listarea.setWidgetResizable(True)
         self.listarea.setObjectName("TaskList")
-        self.listarea.setMinimumHeight(240)
+        self.listarea.setMinimumHeight(176)
         self.listcontainer = QWidget()
         self.listlay = QVBoxLayout(self.listcontainer)
         self.listlay.setContentsMargins(0, 0, 0, 0)
@@ -181,10 +181,29 @@ class CompressionPage(QWidget):
 
         card = QFrame()
         card.setObjectName("SettingCard")
-        form = QFormLayout(card)
-        form.setContentsMargins(16, 14, 16, 14)
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(10)
+        cardv = QVBoxLayout(card)
+        cardv.setContentsMargins(16, 14, 16, 14)
+        cardv.setSpacing(12)
+        cols = QHBoxLayout()
+        cols.setContentsMargins(0, 0, 0, 0)
+        cols.setSpacing(22)
+
+        def _col_form() -> QFormLayout:
+            """两列参数区共用的紧凑表单：标签右对齐，左右两列可目视对齐。"""
+            f = QFormLayout()
+            f.setContentsMargins(0, 0, 0, 0)
+            f.setHorizontalSpacing(10)
+            f.setVerticalSpacing(10)
+            f.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            return f
+
+        left = QVBoxLayout()
+        left.setSpacing(10)
+        right = QVBoxLayout()
+        right.setSpacing(10)
+        form = _col_form()       # 左列上半：档位 / 码率控制
+        form_res = _col_form()   # 左列下半：分辨率
+        rform = _col_form()      # 右列：硬件加速 / 编码器 / 输出目录
 
         f_speed = QHBoxLayout()
         f_speed.setSpacing(8)
@@ -219,19 +238,20 @@ class CompressionPage(QWidget):
         self.pi_name = QLabel("")
         self.pi_name.setStyleSheet(
             "font-size:12.5px;font-weight:700;color:#1c2333;")
+        # 半宽列里标题较长：允许换行，否则 QLabel 的最小宽度会把卡片撑出横向滚动条
+        self.pi_name.setWordWrap(True)
         self.pi_crf = QLabel("")
         self.pi_crf.setStyleSheet(
             "font-size:11px;font-weight:600;color:#4f5bd5;"
             "background:#eef0fe;border-radius:999px;padding:2px 10px;")
-        ihead.addWidget(self.pi_name)
-        ihead.addStretch(1)
-        ihead.addWidget(self.pi_crf)
+        ihead.addWidget(self.pi_name, 1)
+        ihead.addWidget(self.pi_crf, 0)
         ilay.addLayout(ihead)
         self.pi_detail = QLabel("")
         self.pi_detail.setStyleSheet("color:#5c6478;font-size:11.5px;")
         self.pi_detail.setWordWrap(True)
         ilay.addWidget(self.pi_detail)
-        form.addRow(self.preset_info)
+        right.addWidget(self.preset_info)
 
         # 码率控制：CRF（恒定画质）⇄ 目标码率（Mbps）双模式
         f_rate = QHBoxLayout()
@@ -311,29 +331,36 @@ class CompressionPage(QWidget):
         bz.addWidget(HelpLabel("预估体积 = 码率 × 总时长 ÷ 8"))
         self.br_zone.setVisible(False)
         mz.addWidget(self.br_zone, 1)
-        form.addRow(self.mode_zone)
+        left.addLayout(form)          # 档位 / 码率控制
+        left.addWidget(self.mode_zone)
 
         # 分辨率：从高级参数上移，预设与转换页对齐
         f_res = QHBoxLayout()
         f_res.setSpacing(6)
         self.res = QComboBox()
-        self.res.addItem("保持原尺寸", "keep")
-        self.res.addItem("1920 × 1080（1080p）", "1920x1080")
-        self.res.addItem("1280 × 720（720p）", "1280x720")
-        self.res.addItem("854 × 480（480p）", "854x480")
-        self.res.addItem("640 × 360（360p）", "640x360")
-        self.res.addItem("自定义宽 × 高", "custom")
+        set_combo_items(self.res, [
+            ("保持原尺寸", "keep", "推荐"),
+            ("1920 × 1080", "1920x1080", "1080p"),
+            ("1280 × 720", "1280x720", "720p"),
+            ("854 × 480", "854x480", "480p"),
+            ("640 × 360", "640x360", "360p"),
+            ("自定义宽 × 高", "custom", "手动输入"),
+        ])
         self.res.currentIndexChanged.connect(self._on_res_changed)
         f_res.addWidget(self.res)
         self.res_w = QSpinBox(); self.res_w.setRange(2, 7680); self.res_w.setValue(1920)
         self.res_h = QSpinBox(); self.res_h.setRange(2, 4320); self.res_h.setValue(1080)
-        self.res_w.setVisible(False); self.res_h.setVisible(False)
+        # 非「自定义」时，宽高输入框与中间的 × 一起隐藏（原先只隐藏了输入框，
+        # 留下孤立的 × 与 ? 看起来像残缺控件）
+        self.res_x = form_label("×")
+        for w in (self.res_w, self.res_x, self.res_h):
+            w.setVisible(False)
         f_res.addWidget(self.res_w)
-        f_res.addWidget(form_label("×"))
+        f_res.addWidget(self.res_x)
         f_res.addWidget(self.res_h)
         f_res.addWidget(HelpLabel("降档分辨率时，说明卡预估按像素比例同步下调。"))
         f_res.addStretch(1)
-        form.addRow(form_label("分辨率"), f_res)
+        form_res.addRow(form_label("分辨率"), f_res)
 
         f_gpu = QHBoxLayout()
         f_gpu.setSpacing(8)
@@ -343,12 +370,12 @@ class CompressionPage(QWidget):
         self.gpu.toggled.connect(self._on_gpu_toggled)
         f_gpu.addWidget(self.gpu)
         self.gpu_sel = QComboBox()
-        self.gpu_sel.addItem("自动（推荐）", "auto")
+        set_combo_items(self.gpu_sel, [("自动（推荐）", "auto", "按检测优先序")])
         self.gpu_sel.currentIndexChanged.connect(self._on_gpu_sel_changed)
         f_gpu.addWidget(self.gpu_sel)
         f_gpu.addWidget(HelpLabel("需 NVIDIA 显卡且当前 FFmpeg 含 NVENC；未检测到时自动回退软件编码。"))
         f_gpu.addStretch(1)
-        form.addRow(form_label("硬件加速"), f_gpu)
+        rform.addRow(form_label("硬件加速"), f_gpu)
 
         f_enc = QHBoxLayout()
         f_enc.setSpacing(6)
@@ -360,13 +387,9 @@ class CompressionPage(QWidget):
         f_enc.addWidget(self.enc_lbl)
         f_enc.addWidget(HelpLabel("由硬件自动检测（优先 NVIDIA），无 GPU 自动回退软件编码。"))
         f_enc.addStretch(1)
-        form.addRow(form_label("编码器"), f_enc)
+        rform.addRow(form_label("编码器"), f_enc)
 
-        f_od = QHBoxLayout()
-        f_od.setSpacing(8)
         self.od = OutputDirRow()
-        f_od.addWidget(self.od)
-        form.addRow(form_label("输出目录"), f_od)
 
         self.adv = QPushButton("展开高级参数（帧率 / 并发 / 命名）")
         self.adv.setObjectName("Expander")
@@ -374,7 +397,23 @@ class CompressionPage(QWidget):
         self.adv.setCursor(Qt.CursorShape.PointingHandCursor)
         self.adv.setToolTip("显示 / 隐藏高级参数")
         self.adv.toggled.connect(self._on_adv_toggled)
-        form.addRow(self.adv)
+
+        # 装配：上方两列（左参数 / 右说明与环境），下方输出目录与高级入口各占整行。
+        # 输出目录含「下拉 + 输入框 + 浏览」，塞进半宽列会把卡片撑出横向滚动条。
+        left.addLayout(form_res)
+        left.addStretch(1)
+        right.addLayout(rform)
+        right.addStretch(1)
+        cols.addLayout(left, 1)
+        cols.addLayout(right, 1)
+        cardv.addLayout(cols)
+
+        od_row = QHBoxLayout()
+        od_row.setSpacing(10)
+        od_row.addWidget(form_label("输出目录"))
+        od_row.addWidget(self.od, 1)
+        cardv.addLayout(od_row)
+        cardv.addWidget(self.adv, 0, Qt.AlignmentFlag.AlignLeft)
         blay.addWidget(card)
 
         # 高级参数（折叠卡片）：CRF / 分辨率已上移基础区，仅留低频项
@@ -389,8 +428,10 @@ class CompressionPage(QWidget):
         f_fps = QHBoxLayout()
         f_fps.setSpacing(6)
         self.fps = QComboBox()
-        self.fps.addItem("保持原值", "keep")
-        self.fps.addItem("指定", "custom")
+        set_combo_items(self.fps, [
+            ("保持原值", "keep", "推荐"),
+            ("指定", "custom", "右侧填帧率"),
+        ])
         self.fps.currentIndexChanged.connect(self._on_fps_changed)
         f_fps.addWidget(self.fps)
         self.fps_v = QSpinBox(); self.fps_v.setRange(1, 240); self.fps_v.setValue(30)
@@ -464,11 +505,12 @@ class CompressionPage(QWidget):
         self._refresh_preset_info()
         # 选择框：自动 + 已检出的硬编（剔除失效的持久化选择）
         encoders = self._env.gpu_encoders or []
+        hint_of = {"hevc_nvenc": "H.265 硬编", "h264_nvenc": "H.264 硬编",
+                   "av1_nvenc": "AV1 硬编"}
+        set_combo_items(self.gpu_sel,
+                        [("自动（推荐）", "auto", "按检测优先序")]
+                        + [(n, n, hint_of.get(n, "硬编")) for n in encoders])
         self.gpu_sel.blockSignals(True)
-        self.gpu_sel.clear()
-        self.gpu_sel.addItem("自动（推荐）", "auto")
-        for name in encoders:
-            self.gpu_sel.addItem(name, name)
         sel = AppConfig.instance().get("gpu_encoder") or "auto"
         if sel not in [self.gpu_sel.itemData(i) for i in range(self.gpu_sel.count())]:
             sel = "auto"
@@ -677,7 +719,8 @@ class CompressionPage(QWidget):
 
     def _on_res_changed(self) -> None:
         show = self.res.currentData() == "custom"
-        self.res_w.setVisible(show); self.res_h.setVisible(show)
+        for w in (self.res_w, self.res_x, self.res_h):
+            w.setVisible(show)
         self._refresh_preset_info()
 
     # ---------------- 时长探测（码率模式的预估需要总时长） ----------------

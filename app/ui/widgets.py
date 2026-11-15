@@ -7,12 +7,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtGui import (
+    QColor, QCursor, QFont, QFontMetrics, QPainter, QPainterPath, QPen,
+)
 from PySide6.QtWidgets import (
     QButtonGroup, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QLineEdit, QProgressBar, QPushButton, QToolButton, QToolTip, QVBoxLayout,
-    QWidget,
+    QLineEdit, QProgressBar, QPushButton, QStyle, QStyledItemDelegate,
+    QStyleOptionViewItem, QToolButton, QToolTip, QVBoxLayout, QWidget,
 )
 
 from ..config import AppConfig
@@ -345,3 +347,127 @@ class TaskRow(QWidget):
             f"QProgressBar{{background:#edf0f7;border:none;border-radius:999px;}}"
             f"QProgressBar::chunk{{background:{chunk};border-radius:999px;}}"
         )
+
+
+# ---- 下拉项自绘：主文案 + 右侧灰色说明 + 已选对勾 ----
+# QSS 无法表达「弹出项单独选中态」与「一行内两段不同字号」，故走 delegate 自绘。
+HINT_ROLE = Qt.ItemDataRole.UserRole + 101   # 右侧辅助说明（如 1080p / -an）
+CHECK_ROLE = Qt.ItemDataRole.UserRole + 102  # 是否为当前已选值
+
+_BRAND = "#4f5bd5"
+_TEXT_MAIN = "#1c2333"
+_TEXT_SUB = "#9aa3bd"
+_TEXT_DIS = "#b9bfd2"
+_TEXT_DIS_SUB = "#cfd5e2"
+
+
+class HintItemDelegate(QStyledItemDelegate):
+    """QComboBox 弹出项绘制：左侧主文案、右侧灰色说明、末位对勾。
+
+    高亮态（鼠标悬停 / 键盘移动）统一为品牌色底白字，当前已选值额外带对勾——
+    Qt 的弹出层无法区分「当前值」与「悬停项」，用对勾表达已选最清晰。
+    """
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        rect = option.rect.adjusted(2, 1, -2, -1)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+
+        if selected:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(_BRAND))
+            painter.drawRoundedRect(rect, 6, 6)
+            c_main, c_sub = QColor("#ffffff"), QColor(255, 255, 255, 184)
+        elif not enabled:
+            c_main, c_sub = QColor(_TEXT_DIS), QColor(_TEXT_DIS_SUB)
+        else:
+            c_main, c_sub = QColor(_TEXT_MAIN), QColor(_TEXT_SUB)
+
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        hint = str(index.data(HINT_ROLE) or "")
+        checked = bool(index.data(CHECK_ROLE))
+        base_font = option.font
+        right = rect.right() - 10
+
+        # 末位对勾（当前值）：用路径绘制，避免字体缺字形时显示成方块
+        if checked:
+            pen = QPen(c_sub)
+            pen.setWidthF(1.7)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            cx, cy = right - 5, rect.center().y()
+            path = QPainterPath()
+            path.moveTo(cx - 4.2, cy + 0.2)
+            path.lineTo(cx - 1.2, cy + 3.0)
+            path.lineTo(cx + 4.4, cy - 3.2)
+            painter.drawPath(path)
+            right -= 19
+
+        # 右侧辅助说明
+        if hint:
+            f_h = QFont(base_font)
+            f_h.setPointSizeF(7.9)
+            painter.setFont(f_h)
+            painter.setPen(c_sub)
+            w = QFontMetrics(f_h).horizontalAdvance(hint)
+            painter.drawText(QRect(right - w, rect.top(), w, rect.height()),
+                             Qt.AlignmentFlag.AlignCenter, hint)
+            right -= w + 10
+
+        # 主文案（超宽省略）
+        f_m = QFont(base_font)
+        f_m.setPointSizeF(9.5)
+        f_m.setBold(selected)
+        painter.setFont(f_m)
+        painter.setPen(c_main)
+        left = rect.left() + 10
+        avail = max(right - left, 12)
+        shown = QFontMetrics(f_m).elidedText(text, Qt.TextElideMode.ElideRight, avail)
+        painter.drawText(QRect(left, rect.top(), avail, rect.height()),
+                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, shown)
+        painter.restore()
+
+    def sizeHint(self, option: QStyleOptionViewItem, index) -> QSize:
+        base = super().sizeHint(option, index)
+        hint = str(index.data(HINT_ROLE) or "")
+        extra = 0
+        if hint:
+            f = QFont(option.font)
+            f.setPointSizeF(7.9)
+            extra = QFontMetrics(f).horizontalAdvance(hint) + 20
+        return QSize(base.width() + extra + 22, 33)
+
+
+def set_combo_items(combo: QComboBox, items) -> None:
+    """填充下拉并启用自绘：items = [(显示文案, data, 右侧说明或空)...]。"""
+    combo.blockSignals(True)
+    combo.clear()
+    for row in items:
+        label, data = row[0], row[1]
+        hint = row[2] if len(row) > 2 else ""
+        combo.addItem(label, data)
+        combo.setItemData(combo.count() - 1, hint, HINT_ROLE)
+    combo.blockSignals(False)
+    bind_hint_combo(combo)
+
+
+def bind_hint_combo(combo: QComboBox) -> None:
+    """给已有下拉挂自绘 delegate，并让当前值带对勾（可重复调用）。"""
+    if not isinstance(combo.itemDelegate(), HintItemDelegate):
+        combo.setItemDelegate(HintItemDelegate(combo))
+    _sync_combo_check(combo)
+    if not getattr(combo, "_hint_bound", False):
+        combo._hint_bound = True
+        combo.currentIndexChanged.connect(lambda _i, c=combo: _sync_combo_check(c))
+
+
+def _sync_combo_check(combo: QComboBox) -> None:
+    """把「当前值」标记写入 CHECK_ROLE，供 delegate 画对勾。"""
+    cur = combo.currentIndex()
+    for i in range(combo.count()):
+        combo.setItemData(i, i == cur, CHECK_ROLE)
