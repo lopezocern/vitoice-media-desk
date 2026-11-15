@@ -11,13 +11,13 @@
 
 ## 界面一览
 
-![总览](docs/assets/screenshots/overview.png)
+![总览](docs/assets/screenshots/v2/overview.png)
 
-![视频压缩](docs/assets/screenshots/compress.png) ![视频切割](docs/assets/screenshots/cut.png)
+![视频压缩](docs/assets/screenshots/v2/compress.png) ![视频切割](docs/assets/screenshots/v2/cut.png)
 
-![视频拼接](docs/assets/screenshots/concat.png) ![格式转换](docs/assets/screenshots/convert.png)
+![视频拼接](docs/assets/screenshots/v2/concat.png) ![格式转换](docs/assets/screenshots/v2/convert.png)
 
-![文件整理](docs/assets/screenshots/rename.png) ![全局设置](docs/assets/screenshots/settings.png)
+![文件整理](docs/assets/screenshots/v2/rename.png) ![全局设置](docs/assets/screenshots/v2/settings.png)
 
 > 完整操作流程见 [docs/使用说明.md](docs/使用说明.md)。
 
