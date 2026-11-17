@@ -9,6 +9,8 @@
 
 > 主要面向媒体管理与整理场景，为设计师 / 开发者提供一条龙、可视化的批量处理工作台。
 
+> **下载**：[v0.2.0 Windows 绿色版（内置 FFmpeg）](https://github.com/lopezocern/vitoice-media-desk/releases/latest) —— 解压后运行 `MediaDesk.exe`，无需安装 Python 或 FFmpeg。
+
 ## 界面一览
 
 ![总览](docs/assets/screenshots/v2/overview.png)
@@ -44,7 +46,7 @@
 - 操作系统：Windows 10 / 11
 - 完整版 **FFmpeg**（含 `libx264` / `libx265` / `libvpx`）；启用 GPU 硬编需对应 NVENC 支持的 FFmpeg 构建
 
-## 安装
+## 从源码运行（开发）
 
 ```bash
 # 1. 创建并激活虚拟环境
