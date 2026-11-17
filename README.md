@@ -13,13 +13,16 @@
 
 ## 界面一览
 
-![总览](docs/assets/screenshots/v2/overview.png)
-
-![视频压缩](docs/assets/screenshots/v2/compress.png) ![视频切割](docs/assets/screenshots/v2/cut.png)
-
-![视频拼接](docs/assets/screenshots/v2/concat.png) ![格式转换](docs/assets/screenshots/v2/convert.png)
-
-![文件整理](docs/assets/screenshots/v2/rename.png) ![全局设置](docs/assets/screenshots/v2/settings.png)
+| | |
+|:---:|:---:|
+| ![总览](docs/assets/screenshots/v3/overview.png) | ![视频压缩](docs/assets/screenshots/v3/compress.png) |
+| 总览 —— 环境检测与模块入口 | 视频压缩 —— 四档位 + 码率双模式 |
+| ![视频切割](docs/assets/screenshots/v3/cut.png) | ![视频拼接](docs/assets/screenshots/v3/concat.png) |
+| 视频切割 —— 多段时间轴 | 视频拼接 —— 按序拼接 |
+| ![格式转换](docs/assets/screenshots/v3/convert.png) | ![文件整理](docs/assets/screenshots/v3/rename.png) |
+| 格式转换 —— 容器互转 | 文件整理 —— 模板重命名 |
+| ![全局设置](docs/assets/screenshots/v3/settings.png) | |
+| 全局设置 —— FFmpeg / GPU / 输出 | |
 
 > 完整操作流程见 [docs/使用说明.md](docs/使用说明.md)。
 
